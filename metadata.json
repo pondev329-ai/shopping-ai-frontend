@@ -1,0 +1,6 @@
+{
+  "name": "Shopping AI Frontend",
+  "description": "会話を通じて買い物や食事の意思決定を支援するShopping AIのモバイルファーストフロントエンド",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
