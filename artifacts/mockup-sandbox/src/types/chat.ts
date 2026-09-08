@@ -39,3 +39,8 @@ export interface ChatMessage {
   timestamp: number;
   decisionData?: InlineDecisionPayload;
 }
+
+export interface ChatResponse {
+  text: string;
+  decisionData?: InlineDecisionPayload;
+}
