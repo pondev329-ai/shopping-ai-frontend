@@ -29,6 +29,14 @@ export default defineConfig({
     fs: {
       strict: false,
     },
+    proxy: {
+      "/api/render-backend": {
+        target: "https://shopping-ai-jinba-dev.onrender.com",
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/render-backend/, ""),
+        secure: false,
+      },
+    },
   },
   preview: {
     port,

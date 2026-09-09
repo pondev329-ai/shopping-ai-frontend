@@ -43,4 +43,5 @@ export interface ChatMessage {
 export interface ChatResponse {
   text: string;
   decisionData?: InlineDecisionPayload;
+  rawBackendState?: Record<string, unknown>;
 }

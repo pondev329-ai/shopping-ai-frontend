@@ -114,6 +114,9 @@ export const ShoppingAIChat: React.FC<ShoppingAIChatProps> = ({
     if (window.confirm('会話をリセットして、新しく相談を始めますか？')) {
       setMessages([INITIAL_GREETING]);
       localStorage.removeItem('shopping_ai_chat_history');
+      if (chatService.resetConversation) {
+        chatService.resetConversation();
+      }
     }
   };
 
