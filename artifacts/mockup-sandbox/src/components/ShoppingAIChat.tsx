@@ -106,10 +106,26 @@ export const ShoppingAIChat: React.FC<ShoppingAIChatProps> = ({
       };
       setMessages((prev) => [...prev, aiMessage]);
     } catch (err) {
+      let errorText = '通信エラーが発生しました。もう一度入力してみてください。';
+      if (err instanceof Error) {
+        const msg = err.message || '';
+        if (msg.includes('Memory connection is not active') || msg.toLowerCase().includes('memory connection')) {
+          errorText = 'Google Drive Memory の接続が無効または有効期限切れです。通常モードで会話を継続するか、ヘッダーの「Memory未接続」から再接続してください。';
+          // 無効な接続IDを自動解除して通常会話へフォールバック可能にする
+          if (chatService.setMemoryConnectionId) {
+            chatService.setMemoryConnectionId(null);
+          }
+          setMemoryConnectionId(null);
+        } else if (msg.includes('Render Backend returned status')) {
+          errorText = `サーバーとの通信に失敗しました（${msg}）。時間をおいてもう一度お試しください。`;
+        } else {
+          errorText = `通信エラーが発生しました: ${msg}`;
+        }
+      }
       const errorMessage: ChatMessage = {
         id: `msg-${Date.now()}-err`,
         role: 'assistant',
-        content: '通信エラーが発生しました。もう一度入力してみてください。',
+        content: errorText,
         timestamp: Date.now(),
       };
       setMessages((prev) => [...prev, errorMessage]);
@@ -173,7 +189,9 @@ export const ShoppingAIChat: React.FC<ShoppingAIChatProps> = ({
   };
 
   const handleStartOAuth = () => {
-    const connectUrl = 'https://shopping-ai-jinba-dev.onrender.com/memory/connect';
+    const connectUrl = chatService.getMemoryConnectUrl
+      ? chatService.getMemoryConnectUrl()
+      : 'https://shopping-ai-jinba-dev.onrender.com/memory/connect';
     window.open(connectUrl, '_blank');
   };
 

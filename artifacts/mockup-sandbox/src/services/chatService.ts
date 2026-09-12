@@ -15,6 +15,7 @@ export interface ChatService {
   setMemoryConnectionId?(id: string | null): void;
   disconnectMemory?(): Promise<void>;
   onMemoryConnectionChange?(callback: (id: string | null) => void): () => void;
+  getMemoryConnectUrl?(): string;
 }
 
 /**
@@ -167,9 +168,24 @@ export class RenderBackendChatAdapter implements ChatService {
             }
           }
         });
+
+        // 3. 別タブでOAuthが完了した場合の localStorage 同期待受
+        window.addEventListener('storage', (event) => {
+          if (event.key === this.MEMORY_STORAGE_KEY) {
+            const newId = event.newValue && event.newValue.trim().length > 0 ? event.newValue.trim() : null;
+            this.memoryConnectionId = newId;
+            this.memoryListeners.forEach((listener) => {
+              try {
+                listener(newId);
+              } catch {
+                // ignore
+              }
+            });
+          }
+        });
       }
 
-      // 3. ストレージから前回の接続IDを復元
+      // 4. ストレージから前回の接続IDを復元
       const saved = localStorage.getItem(this.MEMORY_STORAGE_KEY);
       if (saved && saved.trim()) {
         this.memoryConnectionId = saved.trim();
@@ -181,6 +197,29 @@ export class RenderBackendChatAdapter implements ChatService {
 
   getMemoryConnectionId(): string | null {
     return this.memoryConnectionId;
+  }
+
+  /**
+   * 現在のフロントエンド公開URL（GitHub Pages または AI Studio/Localhost）を付与した
+   * Google Drive Memory の OAuth 接続用URLを生成します。
+   */
+  getMemoryConnectUrl(): string {
+    const renderConnectBase = `${this.baseUrl}/memory/connect`;
+    if (typeof window !== 'undefined') {
+      try {
+        const currentUrl = new URL(window.location.href);
+        // クエリやハッシュを除去した純粋な公開パス（例: https://user.github.io/repo/）
+        const cleanFrontendUrl = `${currentUrl.origin}${currentUrl.pathname}`;
+        const connectUrl = new URL(renderConnectBase.startsWith('http') ? renderConnectBase : `${window.location.origin}${renderConnectBase}`);
+        connectUrl.searchParams.set('frontend_url', cleanFrontendUrl);
+        connectUrl.searchParams.set('return_to', cleanFrontendUrl);
+        connectUrl.searchParams.set('redirect_uri', cleanFrontendUrl);
+        return connectUrl.toString();
+      } catch {
+        return renderConnectBase;
+      }
+    }
+    return renderConnectBase;
   }
 
   setMemoryConnectionId(id: string | null): void {
@@ -283,8 +322,21 @@ export class RenderBackendChatAdapter implements ChatService {
     }
 
     if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`Render Backend returned status ${response.status}: ${errorText}`);
+      let message = `Render Backend returned status ${response.status}`;
+      try {
+        const errorJson = await response.json();
+        if (errorJson && typeof errorJson.error === 'string') {
+          message = errorJson.error;
+        }
+      } catch {
+        try {
+          const errorText = await response.text();
+          if (errorText) message += `: ${errorText}`;
+        } catch {
+          // ignore
+        }
+      }
+      throw new Error(message);
     }
 
     const data: JinbaBackendRunResponse = await response.json();
