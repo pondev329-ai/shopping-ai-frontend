@@ -9,7 +9,7 @@ import { ChatMessage, ChatResponse, InlineDecisionPayload, SuggestionOption } fr
  * 実行結果（回答テキスト、判断材料、選択肢）の受領のみを規定します。
  */
 export interface ChatService {
-  sendMessage(history: ChatMessage[], userText: string): Promise<ChatResponse>;
+  sendMessage(history: ChatMessage[], userText: string, imageUrl?: string): Promise<ChatResponse>;
   resetConversation?(): void;
   getMemoryConnectionId?(): string | null;
   setMemoryConnectionId?(id: string | null): void;
@@ -276,14 +276,23 @@ export class RenderBackendChatAdapter implements ChatService {
     this.persistState(null);
   }
 
-  async sendMessage(history: ChatMessage[], userText: string): Promise<ChatResponse> {
+  async sendMessage(history: ChatMessage[], userText: string, imageUrl?: string): Promise<ChatResponse> {
+    const text = userText.trim();
+    // 写真付きでテキストが空の場合は、コンテキスト意図を明示したプロンプトを設定
+    const messageToSend = text || (imageUrl ? 'スーパーで見つけた商品・値札・特売・食材の写真です。現在の会話や候補と合わせて判断材料として教えてください。' : '');
+
     const payload: {
       message: string;
+      image?: string;
       state?: Record<string, unknown>;
       memory_connection_id?: string;
     } = {
-      message: userText,
+      message: messageToSend,
     };
+
+    if (imageUrl) {
+      payload.image = imageUrl;
+    }
 
     if (this.backendState) {
       payload.state = this.backendState;

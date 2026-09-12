@@ -37,6 +37,7 @@ export interface ChatMessage {
   role: MessageRole;
   content: string;
   timestamp: number;
+  imageUrl?: string;
   decisionData?: InlineDecisionPayload;
 }
 

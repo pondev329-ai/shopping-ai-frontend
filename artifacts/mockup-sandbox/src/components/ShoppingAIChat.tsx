@@ -1,7 +1,26 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, RotateCcw, Clock, Sparkles, ShoppingBag, Utensils, CheckCircle2, ChevronRight, HardDrive, X, ExternalLink, Check, Copy } from 'lucide-react';
+import {
+  Send,
+  RotateCcw,
+  Clock,
+  Sparkles,
+  ShoppingBag,
+  Utensils,
+  CheckCircle2,
+  ChevronRight,
+  HardDrive,
+  X,
+  ExternalLink,
+  Check,
+  Copy,
+  Camera,
+  Image as ImageIcon,
+  Loader2,
+  ZoomIn,
+} from 'lucide-react';
 import { ChatMessage, InlineDecisionPayload, SuggestionOption } from '../types/chat';
 import { defaultChatService, ChatService } from '../services/chatService';
+import { compressImageToDataUrl } from '../utils/imageCompressor';
 
 interface ShoppingAIChatProps {
   chatService?: ChatService;
@@ -46,8 +65,18 @@ export const ShoppingAIChat: React.FC<ShoppingAIChatProps> = ({
   const [showMemoryModal, setShowMemoryModal] = useState(false);
   const [manualMemoryId, setManualMemoryId] = useState('');
   const [copiedId, setCopiedId] = useState(false);
+
+  // 写真相談用のステートとRef
+  const [selectedImage, setSelectedImage] = useState<string | null>(null);
+  const [isProcessingPhoto, setIsProcessingPhoto] = useState(false);
+  const [showPhotoSheet, setShowPhotoSheet] = useState(false);
+  const [previewModalImage, setPreviewModalImage] = useState<string | null>(null);
+  const [photoError, setPhotoError] = useState<string | null>(null);
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
+  const libraryInputRef = useRef<HTMLInputElement>(null);
 
   // Google Drive Memory 接続ステート監視
   useEffect(() => {
@@ -59,9 +88,19 @@ export const ShoppingAIChat: React.FC<ShoppingAIChatProps> = ({
     }
   }, [chatService]);
 
-  // 永続化
+  // 永続化（画像添付によるクォータ超過を安全にハンドリング）
   useEffect(() => {
-    localStorage.setItem('shopping_ai_chat_history', JSON.stringify(messages));
+    try {
+      localStorage.setItem('shopping_ai_chat_history', JSON.stringify(messages));
+    } catch {
+      // localStorage quota exceeded時の安全フォールバック（最新のメッセージのみ保持）
+      try {
+        const trimmed = messages.slice(-10);
+        localStorage.setItem('shopping_ai_chat_history', JSON.stringify(trimmed));
+      } catch {
+        // ignore
+      }
+    }
   }, [messages]);
 
   // スクロール調整
@@ -77,15 +116,43 @@ export const ShoppingAIChat: React.FC<ShoppingAIChatProps> = ({
     }
   }, [input]);
 
+  // 写真選択・撮影ハンドラー
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    const file = files[0];
+    try {
+      setPhotoError(null);
+      setIsProcessingPhoto(true);
+      const compressedDataUrl = await compressImageToDataUrl(file);
+      setSelectedImage(compressedDataUrl);
+    } catch (err) {
+      console.error('写真の処理に失敗しました:', err);
+      setPhotoError('写真の読み込みに失敗しました。別の写真をお試しください。');
+    } finally {
+      setIsProcessingPhoto(false);
+      // 同じファイルを再度選択できるようにリセット
+      e.target.value = '';
+    }
+  };
+
   const handleSend = async (overrideText?: string) => {
     const textToSend = (overrideText ?? input).trim();
-    if (!textToSend || isTyping) return;
+    const imageToSend = selectedImage;
+    if ((!textToSend && !imageToSend) || isTyping || isProcessingPhoto) return;
+
+    // 写真付きでテキストが空の場合は、スーパーの現場相談に最適な文脈プロンプトを設定
+    const messageContent =
+      textToSend ||
+      'スーパーで見つけた写真です（商品・値札・特売シール・食材など）。現在の会話や候補と合わせて、判断材料としてどう考えるべきか教えてください。';
 
     const userMessage: ChatMessage = {
       id: `msg-${Date.now()}-user`,
       role: 'user',
-      content: textToSend,
+      content: messageContent,
       timestamp: Date.now(),
+      imageUrl: imageToSend || undefined,
     };
 
     const newMessages = [...messages, userMessage];
@@ -93,10 +160,12 @@ export const ShoppingAIChat: React.FC<ShoppingAIChatProps> = ({
     if (!overrideText) {
       setInput('');
     }
+    setSelectedImage(null);
+    setPhotoError(null);
     setIsTyping(true);
 
     try {
-      const response = await chatService.sendMessage(newMessages, textToSend);
+      const response = await chatService.sendMessage(newMessages, messageContent, imageToSend || undefined);
       const aiMessage: ChatMessage = {
         id: `msg-${Date.now()}-ai`,
         role: 'assistant',
@@ -263,6 +332,20 @@ export const ShoppingAIChat: React.FC<ShoppingAIChatProps> = ({
                   : 'bg-white text-stone-800 border border-stone-200 rounded-tl-xs shadow-2xs'
               }`}
             >
+              {msg.imageUrl && (
+                <div className="mb-2.5 overflow-hidden rounded-xl bg-black/15">
+                  <img
+                    src={msg.imageUrl}
+                    alt="相談写真"
+                    className="w-full max-h-64 object-cover rounded-xl cursor-pointer hover:opacity-90 active:scale-[0.99] transition-all"
+                    onClick={() => setPreviewModalImage(msg.imageUrl || null)}
+                  />
+                  <div className="flex items-center justify-end px-1.5 py-1 text-[11px] opacity-85 gap-1">
+                    <ZoomIn className="w-3 h-3" />
+                    <span>タップして拡大</span>
+                  </div>
+                </div>
+              )}
               {msg.content}
             </div>
 
@@ -387,6 +470,102 @@ export const ShoppingAIChat: React.FC<ShoppingAIChatProps> = ({
 
       {/* 3. Input Form (Mobile Optimized) */}
       <footer id="chat-input-footer" className="p-3 bg-white border-t border-stone-200 shrink-0">
+        {/* 隠し input 要素（カメラ撮影用 & アルバム選択用） */}
+        <input
+          ref={cameraInputRef}
+          id="input-file-camera"
+          type="file"
+          accept="image/*"
+          capture="environment"
+          className="hidden"
+          onChange={handleFileChange}
+        />
+        <input
+          ref={libraryInputRef}
+          id="input-file-library"
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={handleFileChange}
+        />
+
+        {/* 写真最適化中ローダー */}
+        {isProcessingPhoto && (
+          <div className="mb-2 p-2 bg-stone-100 border border-stone-200 rounded-xl flex items-center gap-2 text-xs text-stone-600 animate-in fade-in duration-100">
+            <Loader2 className="w-4 h-4 animate-spin text-emerald-600 shrink-0" />
+            <span>写真を準備中...</span>
+          </div>
+        )}
+
+        {/* 写真読み込みエラー表示 */}
+        {photoError && (
+          <div className="mb-2 p-2 bg-rose-50 border border-rose-200 rounded-xl flex items-center justify-between gap-2 text-xs text-rose-700 animate-in fade-in duration-100">
+            <span>{photoError}</span>
+            <button
+              type="button"
+              onClick={() => setPhotoError(null)}
+              className="p-1 text-rose-500 hover:text-rose-800 rounded-full cursor-pointer"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        )}
+
+        {/* 選択中写真プレビューバナー */}
+        {selectedImage && (
+          <div className="mb-2.5 p-2 bg-emerald-50/90 border border-emerald-200 rounded-2xl flex items-center gap-3 animate-in fade-in slide-in-from-bottom-2 duration-150">
+            <div className="relative shrink-0 w-12 h-12 rounded-xl overflow-hidden border border-emerald-300 shadow-2xs bg-stone-100">
+              <img
+                src={selectedImage}
+                alt="選択中の相談写真"
+                className="w-full h-full object-cover cursor-pointer hover:opacity-90 transition-opacity"
+                onClick={() => setPreviewModalImage(selectedImage)}
+              />
+              <button
+                type="button"
+                id="btn-remove-selected-photo"
+                onClick={() => setSelectedImage(null)}
+                className="absolute top-0.5 right-0.5 w-4 h-4 bg-black/75 text-white rounded-full flex items-center justify-center hover:bg-black transition-colors cursor-pointer"
+                title="写真を解除"
+                aria-label="写真を解除"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="text-xs font-semibold text-emerald-950 flex items-center gap-1">
+                <Camera className="w-3.5 h-3.5 text-emerald-700 shrink-0" />
+                写真を追加しました
+              </div>
+              <p className="text-[11px] text-emerald-800/80 truncate mt-0.5">
+                {input.trim() ? '入力内容と合わせて相談します' : 'このまま送信、または質問を入力できます'}
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* 写真選択時のクイック質問候補 */}
+        {selectedImage && !input.trim() && (
+          <div className="mb-2 flex items-center gap-1.5 overflow-x-auto pb-1 text-xs">
+            <span className="text-[11px] text-stone-500 shrink-0 font-medium pl-0.5">質問例:</span>
+            {[
+              'この値札・特売どう？',
+              '今の候補と比べてどっちがいい？',
+              '今日中に使い切るなら買い？',
+              '何が作れる？',
+            ].map((suggestText) => (
+              <button
+                key={suggestText}
+                type="button"
+                onClick={() => setInput(suggestText)}
+                className="shrink-0 px-2.5 py-1 bg-white border border-stone-200 hover:border-emerald-500 text-stone-700 hover:text-emerald-700 rounded-full text-[11px] transition-colors cursor-pointer whitespace-nowrap active:scale-95"
+              >
+                {suggestText}
+              </button>
+            ))}
+          </div>
+        )}
+
         <form
           onSubmit={(e) => {
             e.preventDefault();
@@ -394,6 +573,23 @@ export const ShoppingAIChat: React.FC<ShoppingAIChatProps> = ({
           }}
           className="flex items-end gap-2"
         >
+          {/* 写真相談ボタン */}
+          <button
+            id="btn-photo-consult"
+            type="button"
+            onClick={() => setShowPhotoSheet(true)}
+            disabled={isTyping || isProcessingPhoto}
+            className={`w-11 h-11 rounded-full flex items-center justify-center transition-all shrink-0 cursor-pointer active:scale-95 touch-manipulation disabled:opacity-40 ${
+              selectedImage
+                ? 'bg-emerald-100 text-emerald-700 ring-2 ring-emerald-500'
+                : 'bg-stone-100 hover:bg-stone-200 text-stone-600 hover:text-stone-900'
+            }`}
+            title="写真で相談（カメラ撮影・ライブラリ選択）"
+            aria-label="写真で相談"
+          >
+            <Camera className="w-5 h-5" />
+          </button>
+
           <div className="flex-1 bg-stone-100 rounded-2xl border border-stone-200 focus-within:border-emerald-500 focus-within:bg-white transition-colors px-3.5 py-1.5 flex items-center">
             <textarea
               id="input-chat-message"
@@ -401,7 +597,7 @@ export const ShoppingAIChat: React.FC<ShoppingAIChatProps> = ({
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="今の状況や気分を入力... (例: 疲れてるから20分で)"
+              placeholder={selectedImage ? '写真についての質問を入力... (空欄のまま送信も可能)' : '今の状況や気分を入力... (例: 疲れてるから20分で)'}
               rows={1}
               className="w-full resize-none bg-transparent border-0 focus:outline-hidden text-sm text-stone-900 placeholder:text-stone-400 max-h-28 py-1 leading-relaxed"
             />
@@ -410,7 +606,7 @@ export const ShoppingAIChat: React.FC<ShoppingAIChatProps> = ({
           <button
             id="btn-send-message"
             type="submit"
-            disabled={!input.trim() || isTyping}
+            disabled={(!input.trim() && !selectedImage) || isTyping || isProcessingPhoto}
             className="w-11 h-11 rounded-full bg-emerald-600 text-white flex items-center justify-center disabled:opacity-40 disabled:cursor-not-allowed hover:bg-emerald-700 active:scale-95 transition-all shrink-0 touch-manipulation shadow-xs"
             aria-label="送信"
           >
@@ -537,6 +733,120 @@ export const ShoppingAIChat: React.FC<ShoppingAIChatProps> = ({
                 </div>
               )}
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* 5. Photo Source Selector Sheet (Mobile First for iPhone) */}
+      {showPhotoSheet && (
+        <div
+          id="sheet-photo-backdrop"
+          className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-end justify-center p-0 sm:p-4 animate-in fade-in duration-150"
+          onClick={() => setShowPhotoSheet(false)}
+        >
+          <div
+            id="sheet-photo-content"
+            className="w-full sm:max-w-md bg-white rounded-t-3xl sm:rounded-2xl border border-stone-200 shadow-2xl overflow-hidden animate-in slide-in-from-bottom duration-200"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Sheet Header */}
+            <div className="p-4 border-b border-stone-100 flex items-center justify-between bg-stone-50/80">
+              <div className="flex items-center gap-2">
+                <Camera className="w-5 h-5 text-emerald-700" />
+                <h3 className="font-semibold text-stone-900 text-base">写真で相談する</h3>
+              </div>
+              <button
+                type="button"
+                id="btn-close-photo-sheet"
+                onClick={() => setShowPhotoSheet(false)}
+                className="p-1.5 text-stone-400 hover:text-stone-700 rounded-full hover:bg-stone-200/60 transition-colors cursor-pointer"
+                aria-label="閉じる"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Sheet Body */}
+            <div className="p-4 space-y-3">
+              <p className="text-xs text-stone-500 leading-relaxed">
+                スーパーの商品、値札、特売シール、チラシ、手持ちの食材などを撮影または選択して、Shopping AIと相談できます。
+              </p>
+
+              {/* Option 1: その場でカメラ撮影 */}
+              <button
+                type="button"
+                id="btn-photo-action-camera"
+                onClick={() => {
+                  setShowPhotoSheet(false);
+                  cameraInputRef.current?.click();
+                }}
+                className="w-full flex items-center gap-3.5 p-3.5 rounded-2xl border border-stone-200 hover:border-emerald-500 hover:bg-emerald-50/40 active:bg-emerald-100/50 transition-all text-left cursor-pointer group touch-manipulation"
+              >
+                <div className="w-11 h-11 rounded-xl bg-emerald-100 text-emerald-800 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform shadow-2xs">
+                  <Camera className="w-5 h-5" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="font-semibold text-stone-900 text-sm">その場でカメラ撮影</div>
+                  <div className="text-xs text-stone-500 mt-0.5">売り場の商品や値札、半額シールを直接撮影します</div>
+                </div>
+                <ChevronRight className="w-4 h-4 text-stone-400 group-hover:text-emerald-700 shrink-0" />
+              </button>
+
+              {/* Option 2: 写真ライブラリから選択 */}
+              <button
+                type="button"
+                id="btn-photo-action-library"
+                onClick={() => {
+                  setShowPhotoSheet(false);
+                  libraryInputRef.current?.click();
+                }}
+                className="w-full flex items-center gap-3.5 p-3.5 rounded-2xl border border-stone-200 hover:border-blue-500 hover:bg-blue-50/40 active:bg-blue-100/50 transition-all text-left cursor-pointer group touch-manipulation"
+              >
+                <div className="w-11 h-11 rounded-xl bg-blue-100 text-blue-800 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform shadow-2xs">
+                  <ImageIcon className="w-5 h-5" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="font-semibold text-stone-900 text-sm">写真ライブラリから選択</div>
+                  <div className="text-xs text-stone-500 mt-0.5">iPhoneに保存済みの写真やチラシ画像を選びます</div>
+                </div>
+                <ChevronRight className="w-4 h-4 text-stone-400 group-hover:text-blue-700 shrink-0" />
+              </button>
+
+              <button
+                type="button"
+                id="btn-cancel-photo-sheet"
+                onClick={() => setShowPhotoSheet(false)}
+                className="w-full py-2.5 text-center text-sm font-medium text-stone-600 hover:text-stone-900 bg-stone-100 rounded-xl cursor-pointer active:scale-98 transition-all"
+              >
+                キャンセル
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 6. Fullscreen Image Preview Lightbox */}
+      {previewModalImage && (
+        <div
+          id="modal-image-lightbox"
+          className="fixed inset-0 z-50 bg-black/85 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-150"
+          onClick={() => setPreviewModalImage(null)}
+        >
+          <div className="relative max-w-full max-h-full flex flex-col items-center">
+            <button
+              id="btn-close-lightbox"
+              onClick={() => setPreviewModalImage(null)}
+              className="absolute -top-12 right-0 p-2 text-white/80 hover:text-white rounded-full bg-black/50 hover:bg-black/80 transition-colors cursor-pointer"
+              aria-label="閉じる"
+            >
+              <X className="w-6 h-6" />
+            </button>
+            <img
+              src={previewModalImage}
+              alt="拡大プレビュー"
+              className="max-h-[80vh] max-w-[95vw] object-contain rounded-xl shadow-2xl border border-white/10"
+              onClick={(e) => e.stopPropagation()}
+            />
           </div>
         </div>
       )}
