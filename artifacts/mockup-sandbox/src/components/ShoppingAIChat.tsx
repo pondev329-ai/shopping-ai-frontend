@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, RotateCcw, Clock, Sparkles, ShoppingBag, Utensils, CheckCircle2, ChevronRight } from 'lucide-react';
+import { Send, RotateCcw, Clock, Sparkles, ShoppingBag, Utensils, CheckCircle2, ChevronRight, HardDrive, X, ExternalLink, Check, Copy } from 'lucide-react';
 import { ChatMessage, InlineDecisionPayload, SuggestionOption } from '../types/chat';
 import { defaultChatService, ChatService } from '../services/chatService';
 
@@ -40,8 +40,24 @@ export const ShoppingAIChat: React.FC<ShoppingAIChatProps> = ({
 
   const [input, setInput] = useState('');
   const [isTyping, setIsTyping] = useState(false);
+  const [memoryConnectionId, setMemoryConnectionId] = useState<string | null>(() => {
+    return chatService.getMemoryConnectionId ? chatService.getMemoryConnectionId() : null;
+  });
+  const [showMemoryModal, setShowMemoryModal] = useState(false);
+  const [manualMemoryId, setManualMemoryId] = useState('');
+  const [copiedId, setCopiedId] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // Google Drive Memory 接続ステート監視
+  useEffect(() => {
+    if (chatService.onMemoryConnectionChange) {
+      const unsubscribe = chatService.onMemoryConnectionChange((id) => {
+        setMemoryConnectionId(id);
+      });
+      return unsubscribe;
+    }
+  }, [chatService]);
 
   // 永続化
   useEffect(() => {
@@ -124,6 +140,43 @@ export const ShoppingAIChat: React.FC<ShoppingAIChatProps> = ({
     handleSend(`「${option.title}」が気になります。これについて詳しく教えてください。`);
   };
 
+  const handleDisconnectMemory = async () => {
+    if (window.confirm('Google Drive Memory を切断しますか？\n（切断すると会話で外部Memoryは利用されなくなります）')) {
+      if (chatService.disconnectMemory) {
+        await chatService.disconnectMemory();
+      } else if (chatService.setMemoryConnectionId) {
+        chatService.setMemoryConnectionId(null);
+      }
+      setMemoryConnectionId(null);
+      setShowMemoryModal(false);
+    }
+  };
+
+  const handleApplyManualMemoryId = (e: React.FormEvent) => {
+    e.preventDefault();
+    const trimmed = manualMemoryId.trim();
+    if (!trimmed) return;
+    if (chatService.setMemoryConnectionId) {
+      chatService.setMemoryConnectionId(trimmed);
+    }
+    setMemoryConnectionId(trimmed);
+    setManualMemoryId('');
+    setShowMemoryModal(false);
+  };
+
+  const handleCopyConnectionId = () => {
+    if (memoryConnectionId) {
+      navigator.clipboard?.writeText(memoryConnectionId);
+      setCopiedId(true);
+      setTimeout(() => setCopiedId(false), 2000);
+    }
+  };
+
+  const handleStartOAuth = () => {
+    const connectUrl = 'https://shopping-ai-jinba-dev.onrender.com/memory/connect';
+    window.open(connectUrl, '_blank');
+  };
+
   return (
     <div id="shopping-ai-root" className="flex flex-col h-[100dvh] w-full max-w-lg mx-auto bg-stone-50 text-stone-900 overflow-hidden font-sans border-x border-stone-200 shadow-sm">
       {/* 1. Header (Mobile First) */}
@@ -137,15 +190,43 @@ export const ShoppingAIChat: React.FC<ShoppingAIChatProps> = ({
             <p className="text-xs text-stone-500">買い物・食事の意思決定サポート</p>
           </div>
         </div>
-        <button
-          id="btn-reset-conversation"
-          onClick={handleReset}
-          className="p-2 text-stone-500 hover:text-stone-800 hover:bg-stone-100 rounded-full transition-colors active:scale-95 touch-manipulation"
-          title="会話をリセット"
-          aria-label="会話をリセット"
-        >
-          <RotateCcw className="w-4 h-4" />
-        </button>
+        <div className="flex items-center gap-1.5">
+          {memoryConnectionId ? (
+            <button
+              id="btn-memory-connected"
+              onClick={() => setShowMemoryModal(true)}
+              className="flex items-center gap-1.5 px-2.5 py-1 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-full text-xs font-medium hover:bg-emerald-100 transition-colors cursor-pointer active:scale-95 touch-manipulation"
+              title={`Google Drive Memory 接続中 (${memoryConnectionId}) - クリックで確認・切断`}
+              aria-label="Google Drive Memory 接続中"
+            >
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+              <HardDrive className="w-3.5 h-3.5 text-emerald-700" />
+              <span className="hidden sm:inline">Drive Memory</span>
+              <span className="sm:hidden">Memory</span>
+            </button>
+          ) : (
+            <button
+              id="btn-memory-connect"
+              onClick={() => setShowMemoryModal(true)}
+              className="flex items-center gap-1.5 px-2.5 py-1 bg-stone-100 hover:bg-stone-200 text-stone-600 rounded-full text-xs font-medium transition-colors cursor-pointer active:scale-95 touch-manipulation"
+              title="Google Drive Memory を接続"
+              aria-label="Google Drive Memory を接続"
+            >
+              <HardDrive className="w-3.5 h-3.5 text-stone-500" />
+              <span>Memory未接続</span>
+            </button>
+          )}
+
+          <button
+            id="btn-reset-conversation"
+            onClick={handleReset}
+            className="p-2 text-stone-500 hover:text-stone-800 hover:bg-stone-100 rounded-full transition-colors active:scale-95 touch-manipulation cursor-pointer"
+            title="会話をリセット"
+            aria-label="会話をリセット"
+          >
+            <RotateCcw className="w-4 h-4" />
+          </button>
+        </div>
       </header>
 
       {/* 2. Messages Stream */}
@@ -319,6 +400,128 @@ export const ShoppingAIChat: React.FC<ShoppingAIChatProps> = ({
           </button>
         </form>
       </footer>
+
+      {/* 4. Memory Connection Dialog Modal */}
+      {showMemoryModal && (
+        <div
+          id="modal-memory-backdrop"
+          className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4"
+          onClick={() => setShowMemoryModal(false)}
+        >
+          <div
+            id="modal-memory-card"
+            className="w-full sm:max-w-md bg-white rounded-t-2xl sm:rounded-2xl border border-stone-200 shadow-xl overflow-hidden animate-in fade-in slide-in-from-bottom-4 duration-150"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="flex items-center justify-between px-5 py-4 border-b border-stone-100 bg-stone-50/70">
+              <div className="flex items-center gap-2">
+                <HardDrive className="w-5 h-5 text-emerald-700" />
+                <h3 className="font-semibold text-stone-900 text-base">Google Drive Memory</h3>
+              </div>
+              <button
+                id="btn-close-memory-modal"
+                onClick={() => setShowMemoryModal(false)}
+                className="p-1.5 text-stone-400 hover:text-stone-700 rounded-full hover:bg-stone-200/60 transition-colors cursor-pointer"
+                aria-label="閉じる"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-5 space-y-4 text-sm text-stone-600">
+              {memoryConnectionId ? (
+                <div className="space-y-4">
+                  <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="w-2.5 h-2.5 rounded-full bg-emerald-600 animate-pulse" />
+                      <span className="font-medium text-emerald-900">接続中（Active）</span>
+                    </div>
+                    <span className="text-xs text-emerald-700 bg-emerald-100/60 px-2 py-0.5 rounded-md font-mono">
+                      Google Drive
+                    </span>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-medium text-stone-500 mb-1">接続ID (memory_connection_id)</label>
+                    <div className="flex items-center gap-2 p-2 bg-stone-100 rounded-lg border border-stone-200 font-mono text-xs text-stone-800 break-all">
+                      <span className="flex-1">{memoryConnectionId}</span>
+                      <button
+                        onClick={handleCopyConnectionId}
+                        className="p-1.5 text-stone-500 hover:text-stone-800 rounded hover:bg-stone-200 transition-colors shrink-0 cursor-pointer"
+                        title="IDをコピー"
+                      >
+                        {copiedId ? <Check className="w-4 h-4 text-emerald-600" /> : <Copy className="w-4 h-4" />}
+                      </button>
+                    </div>
+                  </div>
+
+                  <p className="text-xs leading-relaxed text-stone-500">
+                    ユーザー自身のGoogle Drive上のMemory領域がマウントされています。会話実行時にパーソナライズされた食材や嗜好のコンテキストが反映されます。
+                  </p>
+
+                  <div className="pt-2 flex flex-col gap-2">
+                    <button
+                      id="btn-disconnect-memory"
+                      onClick={handleDisconnectMemory}
+                      className="w-full py-2.5 px-4 bg-red-50 text-red-700 hover:bg-red-100 border border-red-200 rounded-xl font-medium text-sm transition-colors active:scale-98 cursor-pointer"
+                    >
+                      Memoryを切断する（Eject）
+                    </button>
+                    <button
+                      onClick={() => setShowMemoryModal(false)}
+                      className="w-full py-2 text-stone-500 hover:text-stone-800 text-sm font-medium cursor-pointer"
+                    >
+                      閉じる
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <p className="leading-relaxed">
+                    Shopping AIはユーザーアカウントを持たず、ユーザー自身のGoogle Driveを「外部メモリーカード」として接続します。
+                  </p>
+
+                  <button
+                    id="btn-start-google-oauth"
+                    onClick={handleStartOAuth}
+                    className="w-full py-3 px-4 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-medium text-sm transition-all flex items-center justify-center gap-2 shadow-xs active:scale-98 cursor-pointer"
+                  >
+                    <span>GoogleアカウントでMemoryを接続</span>
+                    <ExternalLink className="w-4 h-4" />
+                  </button>
+
+                  <div className="relative flex py-1 items-center">
+                    <div className="flex-grow border-t border-stone-200"></div>
+                    <span className="flex-shrink mx-3 text-xs text-stone-400">または接続IDを直接入力</span>
+                    <div className="flex-grow border-t border-stone-200"></div>
+                  </div>
+
+                  <form onSubmit={handleApplyManualMemoryId} className="space-y-2">
+                    <input
+                      id="input-manual-memory-id"
+                      type="text"
+                      value={manualMemoryId}
+                      onChange={(e) => setManualMemoryId(e.target.value)}
+                      placeholder="memory_connection_id を貼り付け"
+                      className="w-full px-3 py-2 text-xs font-mono bg-stone-50 border border-stone-200 rounded-lg focus:outline-emerald-500 focus:bg-white transition-colors"
+                    />
+                    <button
+                      id="btn-apply-memory-id"
+                      type="submit"
+                      disabled={!manualMemoryId.trim()}
+                      className="w-full py-2 px-3 bg-stone-800 hover:bg-stone-900 disabled:opacity-40 text-white rounded-lg text-xs font-medium transition-colors cursor-pointer"
+                    >
+                      接続IDを適用
+                    </button>
+                  </form>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

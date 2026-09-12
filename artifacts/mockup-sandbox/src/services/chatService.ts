@@ -11,6 +11,10 @@ import { ChatMessage, ChatResponse, InlineDecisionPayload, SuggestionOption } fr
 export interface ChatService {
   sendMessage(history: ChatMessage[], userText: string): Promise<ChatResponse>;
   resetConversation?(): void;
+  getMemoryConnectionId?(): string | null;
+  setMemoryConnectionId?(id: string | null): void;
+  disconnectMemory?(): Promise<void>;
+  onMemoryConnectionChange?(callback: (id: string | null) => void): () => void;
 }
 
 /**
@@ -67,26 +71,38 @@ interface JinbaBackendRunResponse {
  */
 export class RenderBackendChatAdapter implements ChatService {
   private endpoint: string;
+  private baseUrl: string;
   private backendState: Record<string, unknown> | null = null;
+  private memoryConnectionId: string | null = null;
   private readonly STORAGE_KEY = 'shopping_ai_backend_state';
+  private readonly MEMORY_STORAGE_KEY = 'shopping_ai_memory_connection_id';
+  private memoryListeners: Set<(id: string | null) => void> = new Set();
 
   constructor(endpoint?: string) {
-    // Vite開発環境のプロキシ (/api/render-backend/run) または環境変数/直接URL
+    // Vite開発環境のプロキシ (/api/render-backend) または環境変数/直接URL
     const metaEnv = typeof import.meta !== 'undefined' && import.meta.env ? import.meta.env : undefined;
     const envUrl = metaEnv?.VITE_RENDER_BACKEND_URL;
+
     if (endpoint) {
       this.endpoint = endpoint;
+      this.baseUrl = endpoint.replace(/\/run\/?$/, '');
     } else if (metaEnv?.DEV) {
       // 開発・プレビューサーバー内ではViteプロキシ経由でCORSを安全に回避
+      this.baseUrl = '/api/render-backend';
       this.endpoint = '/api/render-backend/run';
     } else if (envUrl) {
-      this.endpoint = `${envUrl.replace(/\/+$/, '')}/run`;
+      this.baseUrl = envUrl.replace(/\/+$/, '');
+      this.endpoint = `${this.baseUrl}/run`;
     } else {
+      this.baseUrl = 'https://shopping-ai-jinba-dev.onrender.com';
       this.endpoint = 'https://shopping-ai-jinba-dev.onrender.com/run';
     }
 
     // 保存されている前回のバックエンドStateがあれば復元
     this.restoreState();
+
+    // Google Drive Memory 接続IDの復元・URLパラメータ/メッセージ待受
+    this.restoreMemoryConnection();
   }
 
   private restoreState(): void {
@@ -113,6 +129,110 @@ export class RenderBackendChatAdapter implements ChatService {
     }
   }
 
+  private restoreMemoryConnection(): void {
+    try {
+      // 1. URLクエリパラメータまたはHashから OAuth完了後の memory_connection_id を検出
+      if (typeof window !== 'undefined') {
+        const urlParams = new URLSearchParams(window.location.search);
+        const capturedId = urlParams.get('memory_connection_id') || urlParams.get('memory_id') || urlParams.get('connection_id');
+        if (capturedId && capturedId.trim()) {
+          this.setMemoryConnectionId(capturedId.trim());
+
+          // ブラウザのアドレスバーから接続IDを安全に除去（履歴を汚さずリロード時の重複取得を防止）
+          const cleanUrl = new URL(window.location.href);
+          cleanUrl.searchParams.delete('memory_connection_id');
+          cleanUrl.searchParams.delete('memory_id');
+          cleanUrl.searchParams.delete('connection_id');
+          window.history.replaceState({}, document.title, cleanUrl.toString());
+          return;
+        }
+
+        // URL hash (フラグメント) からの検出
+        if (window.location.hash && window.location.hash.includes('memory_connection_id=')) {
+          const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+          const hashId = hashParams.get('memory_connection_id');
+          if (hashId && hashId.trim()) {
+            this.setMemoryConnectionId(hashId.trim());
+            window.history.replaceState({}, document.title, window.location.pathname + window.location.search);
+            return;
+          }
+        }
+
+        // 2. OAuth ポップアップ等からの postMessage を待受
+        window.addEventListener('message', (event) => {
+          if (event.data && typeof event.data === 'object') {
+            const msgId = event.data.memory_connection_id || event.data.memoryConnectionId;
+            if (typeof msgId === 'string' && msgId.trim().length > 0) {
+              this.setMemoryConnectionId(msgId.trim());
+            }
+          }
+        });
+      }
+
+      // 3. ストレージから前回の接続IDを復元
+      const saved = localStorage.getItem(this.MEMORY_STORAGE_KEY);
+      if (saved && saved.trim()) {
+        this.memoryConnectionId = saved.trim();
+      }
+    } catch {
+      this.memoryConnectionId = null;
+    }
+  }
+
+  getMemoryConnectionId(): string | null {
+    return this.memoryConnectionId;
+  }
+
+  setMemoryConnectionId(id: string | null): void {
+    this.memoryConnectionId = id && id.trim().length > 0 ? id.trim() : null;
+    try {
+      if (this.memoryConnectionId) {
+        localStorage.setItem(this.MEMORY_STORAGE_KEY, this.memoryConnectionId);
+      } else {
+        localStorage.removeItem(this.MEMORY_STORAGE_KEY);
+      }
+    } catch {
+      // ignore
+    }
+
+    // 接続状態変更を通知
+    this.memoryListeners.forEach((listener) => {
+      try {
+        listener(this.memoryConnectionId);
+      } catch {
+        // ignore listener error
+      }
+    });
+  }
+
+  onMemoryConnectionChange(callback: (id: string | null) => void): () => void {
+    this.memoryListeners.add(callback);
+    return () => {
+      this.memoryListeners.delete(callback);
+    };
+  }
+
+  async disconnectMemory(): Promise<void> {
+    const activeId = this.memoryConnectionId;
+    // フロントエンドの接続IDを即座に破棄（切断）
+    this.setMemoryConnectionId(null);
+
+    // Render Backend 側にも切断（登録解除）をリクエスト
+    if (activeId) {
+      try {
+        await fetch(`${this.baseUrl}/memory/disconnect`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ memory_connection_id: activeId }),
+        });
+      } catch {
+        // ネットワーク切断時でもフロントエンド側の破棄は完了済み
+      }
+    }
+  }
+
   resetConversation(): void {
     this.persistState(null);
   }
@@ -121,12 +241,18 @@ export class RenderBackendChatAdapter implements ChatService {
     const payload: {
       message: string;
       state?: Record<string, unknown>;
+      memory_connection_id?: string;
     } = {
       message: userText,
     };
 
     if (this.backendState) {
       payload.state = this.backendState;
+    }
+
+    // Google Drive Memory 接続IDが存在する場合はペイロードに含めて送信
+    if (this.memoryConnectionId) {
+      payload.memory_connection_id = this.memoryConnectionId;
     }
 
     let response: Response;
