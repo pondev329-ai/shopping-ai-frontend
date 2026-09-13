@@ -9,11 +9,14 @@ import { ChatMessage, ChatResponse, InlineDecisionPayload, SuggestionOption } fr
  * 実行結果（回答テキスト、判断材料、選択肢）の受領のみを規定します。
  */
 export interface ChatService {
-  sendMessage(history: ChatMessage[], userText: string, imageUrl?: string): Promise<ChatResponse>;
+  sendMessage(history: ChatMessage[], userText: string, imageUrl?: string, sessionId?: string): Promise<ChatResponse>;
   resetConversation?(): void;
+  getBackendState?(): Record<string, unknown> | null;
+  setBackendState?(state: Record<string, unknown> | null): void;
   getMemoryConnectionId?(): string | null;
   setMemoryConnectionId?(id: string | null): void;
   disconnectMemory?(): Promise<void>;
+  deleteMemorySession?(sessionId: string, connectionId?: string): Promise<{ success: boolean; error?: string }>;
   onMemoryConnectionChange?(callback: (id: string | null) => void): () => void;
   getMemoryConnectUrl?(): string;
 }
@@ -272,11 +275,85 @@ export class RenderBackendChatAdapter implements ChatService {
     }
   }
 
+  /**
+   * Google Drive Memory上のセッションデータを削除します。
+   * Flow: Frontend -> Render /memory/session/delete -> Memory Runner -> Memory Flow delete_session -> Google Drive
+   * 
+   * 送信ペイロード:
+   * {
+   *   "memory_connection_id": "<現在接続中のGoogle Drive connection id>",
+   *   "session_id": "<削除対象のsession id>"
+   * }
+   */
+  async deleteMemorySession(sessionId: string, connectionId?: string): Promise<{ success: boolean; error?: string }> {
+    const activeConnectionId = connectionId ?? this.memoryConnectionId;
+    const deleteUrl = `${this.baseUrl}/memory/session/delete`;
+    const payload = {
+      memory_connection_id: activeConnectionId || '',
+      session_id: sessionId,
+    };
+
+    try {
+      const response = await fetch(deleteUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        let errorDetail = `HTTP ${response.status}`;
+        try {
+          const errData = await response.json();
+          if (errData.detail || errData.error || errData.message) {
+            errorDetail = errData.detail || errData.error || errData.message;
+          }
+        } catch {
+          try {
+            const errText = await response.text();
+            if (errText) errorDetail = errText;
+          } catch {
+            // ignore
+          }
+        }
+        return {
+          success: false,
+          error: `Memoryセッション削除に失敗しました (${errorDetail})`,
+        };
+      }
+
+      const resData = await response.json().catch(() => ({ ok: true }));
+      if (resData && (resData.ok === false || resData.success === false)) {
+        return {
+          success: false,
+          error: resData.error || resData.message || resData.detail || 'Memoryセッション削除に失敗しました',
+        };
+      }
+
+      return { success: true };
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : 'ネットワーク通信エラー';
+      return {
+        success: false,
+        error: `通信エラー: ${errMsg}`,
+      };
+    }
+  }
+
   resetConversation(): void {
     this.persistState(null);
   }
 
-  async sendMessage(history: ChatMessage[], userText: string, imageUrl?: string): Promise<ChatResponse> {
+  getBackendState(): Record<string, unknown> | null {
+    return this.backendState;
+  }
+
+  setBackendState(state: Record<string, unknown> | null): void {
+    this.persistState(state);
+  }
+
+  async sendMessage(history: ChatMessage[], userText: string, imageUrl?: string, sessionId?: string): Promise<ChatResponse> {
     const text = userText.trim();
     // 写真付きでテキストが空の場合は、コンテキスト意図を明示したプロンプトを設定
     const messageToSend = text || (imageUrl ? 'スーパーで見つけた商品・値札・特売・食材の写真です。現在の会話や候補と合わせて判断材料として教えてください。' : '');
@@ -286,6 +363,7 @@ export class RenderBackendChatAdapter implements ChatService {
       image?: string;
       state?: Record<string, unknown>;
       memory_connection_id?: string;
+      session_id?: string;
     } = {
       message: messageToSend,
     };
@@ -301,6 +379,10 @@ export class RenderBackendChatAdapter implements ChatService {
     // Google Drive Memory 接続IDが存在する場合はペイロードに含めて送信
     if (this.memoryConnectionId) {
       payload.memory_connection_id = this.memoryConnectionId;
+    }
+
+    if (sessionId) {
+      payload.session_id = sessionId;
     }
 
     let response: Response;
