@@ -12,6 +12,8 @@ import {
   Check,
   AlertTriangle,
   Loader2,
+  HardDrive,
+  ChevronRight,
 } from 'lucide-react';
 import { ShoppingSession } from '../types/session';
 
@@ -25,6 +27,7 @@ interface SessionDrawerProps {
   onDeleteSession: (sessionId: string) => Promise<{ success: boolean; error?: string }> | void;
   onUpdateSessionStatus: (sessionId: string, status: 'in_progress' | 'completed') => void;
   onRenameSession: (sessionId: string, newTitle: string) => void;
+  onOpenMemoryRom?: () => void;
 }
 
 export const SessionDrawer: React.FC<SessionDrawerProps> = ({
@@ -37,6 +40,7 @@ export const SessionDrawer: React.FC<SessionDrawerProps> = ({
   onDeleteSession,
   onUpdateSessionStatus,
   onRenameSession,
+  onOpenMemoryRom,
 }) => {
   const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
   const [editingTitle, setEditingTitle] = useState('');
@@ -176,6 +180,28 @@ export const SessionDrawer: React.FC<SessionDrawerProps> = ({
             </div>
           )}
         </div>
+
+        {/* Google Drive Memory ROM 管理へのリンク */}
+        {onOpenMemoryRom && (
+          <div className="px-5 py-2.5 bg-stone-100/70 border-t border-stone-200 flex items-center justify-between shrink-0">
+            <div className="text-[11px] text-stone-600 font-medium flex items-center gap-1.5">
+              <HardDrive className="w-3.5 h-3.5 text-stone-500" />
+              <span>Google Drive 記憶（ROM）</span>
+            </div>
+            <button
+              type="button"
+              id="btn-drawer-open-memory-rom"
+              onClick={() => {
+                onClose();
+                onOpenMemoryRom();
+              }}
+              className="text-xs font-medium text-emerald-700 hover:text-emerald-800 flex items-center gap-1 cursor-pointer hover:underline"
+            >
+              <span>記憶一覧を確認</span>
+              <ChevronRight className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        )}
 
         {/* Footer Note */}
         <div className="px-5 py-3 bg-stone-50 border-t border-stone-200 text-[11px] text-stone-500 shrink-0">

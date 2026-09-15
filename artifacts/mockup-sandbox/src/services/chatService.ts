@@ -1,4 +1,10 @@
 import { ChatMessage, ChatResponse, InlineDecisionPayload, SuggestionOption } from '../types/chat';
+import {
+  MemoryRomItem,
+  ListMemoryRomParams,
+  ListMemoryRomResult,
+  classifyMemoryRomType,
+} from '../types/memory';
 
 /**
  * ChatService
@@ -17,6 +23,7 @@ export interface ChatService {
   setMemoryConnectionId?(id: string | null): void;
   disconnectMemory?(): Promise<void>;
   deleteMemorySession?(sessionId: string, connectionId?: string): Promise<{ success: boolean; error?: string }>;
+  listMemoryRom?(params?: ListMemoryRomParams): Promise<ListMemoryRomResult>;
   onMemoryConnectionChange?(callback: (id: string | null) => void): () => void;
   getMemoryConnectUrl?(): string;
 }
@@ -336,6 +343,156 @@ export class RenderBackendChatAdapter implements ChatService {
       const errMsg = err instanceof Error ? err.message : 'ネットワーク通信エラー';
       return {
         success: false,
+        error: `通信エラー: ${errMsg}`,
+      };
+    }
+  }
+
+  /**
+   * Google Drive Memory上のROMデータ一覧を取得します。
+   * Flow: Frontend -> Render /memory/rom/list -> Memory Runner -> Memory Flow list_rom -> Google Drive
+   * 
+   * 送信ペイロード:
+   * {
+   *   "memory_connection_id": "<現在接続中のGoogle Drive connection id>",
+   *   "session_id": "<任意>",
+   *   "item_type": "<任意>"
+   * }
+   */
+  async listMemoryRom(params?: ListMemoryRomParams): Promise<ListMemoryRomResult> {
+    const activeConnectionId = params?.connectionId ?? this.memoryConnectionId;
+    if (!activeConnectionId) {
+      return {
+        success: false,
+        items: [],
+        error: 'Google Drive Memoryが未接続です。先にGoogleアカウントを接続してください。',
+      };
+    }
+
+    const listUrl = `${this.baseUrl}/memory/rom/list`;
+    const payload: Record<string, string> = {
+      memory_connection_id: activeConnectionId,
+    };
+    if (params?.sessionId && params.sessionId.trim()) {
+      payload.session_id = params.sessionId.trim();
+    }
+    if (params?.itemType && params.itemType.trim()) {
+      payload.item_type = params.itemType.trim();
+    }
+
+    try {
+      const response = await fetch(listUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        let errorDetail = `HTTP ${response.status}`;
+        try {
+          const errData = await response.json();
+          if (errData.detail || errData.error || errData.message) {
+            errorDetail = errData.detail || errData.error || errData.message;
+          }
+        } catch {
+          try {
+            const errText = await response.text();
+            if (errText) errorDetail = errText;
+          } catch {
+            // ignore
+          }
+        }
+        return {
+          success: false,
+          items: [],
+          error: `Memory ROM一覧の取得に失敗しました (${errorDetail})`,
+        };
+      }
+
+      const resData = await response.json().catch(() => ({ ok: false }));
+      if (resData && (resData.ok === false || resData.success === false)) {
+        return {
+          success: false,
+          items: [],
+          error: resData.error || resData.message || resData.detail || 'Memory ROM一覧の取得に失敗しました',
+        };
+      }
+
+      // レスポンスからアイテム一覧を柔軟に抽出
+      let rawList: unknown[] = [];
+      if (Array.isArray(resData)) {
+        rawList = resData;
+      } else if (Array.isArray(resData.items)) {
+        rawList = resData.items;
+      } else if (Array.isArray(resData.rom_items)) {
+        rawList = resData.rom_items;
+      } else if (Array.isArray(resData.rom_list)) {
+        rawList = resData.rom_list;
+      } else if (Array.isArray(resData.files)) {
+        rawList = resData.files;
+      } else if (resData.result && typeof resData.result === 'object') {
+        const r = resData.result as Record<string, unknown>;
+        if (Array.isArray(r)) {
+          rawList = r;
+        } else if (Array.isArray(r.items)) {
+          rawList = r.items;
+        } else if (Array.isArray(r.rom_items)) {
+          rawList = r.rom_items;
+        } else if (Array.isArray(r.files)) {
+          rawList = r.files;
+        }
+      } else if (Array.isArray(resData.data)) {
+        rawList = resData.data;
+      }
+
+      // 各アイテムを正規化し、5つのカテゴリ（Session ROM, Conversation Record, Session Image, Shared ROM, Unknown）に分類
+      const items: MemoryRomItem[] = rawList.map((raw: any, index: number) => {
+        const driveFileId = String(
+          raw.drive_file_id || raw.file_id || raw.id || `file_${index + 1}`
+        );
+        const rawType = String(raw.item_type || raw.type || raw.category || '');
+        const rawName = String(raw.name || raw.filename || raw.title || driveFileId);
+        const mimeType = raw.mime_type || raw.mimeType || undefined;
+        const itemType = classifyMemoryRomType(rawType, rawName, mimeType);
+        const isSessionScoped =
+          itemType === 'session_rom' ||
+          itemType === 'conversation_record' ||
+          itemType === 'session_image';
+
+        return {
+          id: driveFileId,
+          drive_file_id: driveFileId,
+          name: rawName,
+          item_type: itemType,
+          raw_type: rawType || undefined,
+          session_id: raw.session_id || raw.sessionId || undefined,
+          updated_at:
+            raw.updated_at ||
+            raw.modified_time ||
+            raw.updatedAt ||
+            raw.timestamp ||
+            raw.created_at ||
+            undefined,
+          size: raw.size || raw.file_size || raw.bytes || undefined,
+          description: raw.description || raw.summary || undefined,
+          mime_type: mimeType,
+          is_session_scoped: isSessionScoped,
+          metadata: typeof raw === 'object' ? raw : undefined,
+        };
+      });
+
+      return {
+        success: true,
+        items,
+        totalCount: items.length,
+      };
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : 'ネットワーク通信エラー';
+      return {
+        success: false,
+        items: [],
         error: `通信エラー: ${errMsg}`,
       };
     }

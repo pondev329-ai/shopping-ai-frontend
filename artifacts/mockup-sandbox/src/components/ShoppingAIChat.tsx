@@ -18,6 +18,7 @@ import {
   ShoppingBag,
   Utensils,
   Plus,
+  Database,
 } from 'lucide-react';
 import { ChatMessage, SuggestionOption } from '../types/chat';
 import { ShoppingSession } from '../types/session';
@@ -33,6 +34,7 @@ import {
 import { StatusSummaryCard } from './StatusSummaryCard';
 import { SessionDrawer } from './SessionDrawer';
 import { ConversationReviewModal } from './ConversationReviewModal';
+import { MemoryRomModal } from './MemoryRomModal';
 
 interface ShoppingAIChatProps {
   chatService?: ChatService;
@@ -62,6 +64,7 @@ export const ShoppingAIChat: React.FC<ShoppingAIChatProps> = ({
   // 3. UI表示制御
   const [showSessionDrawer, setShowSessionDrawer] = useState(false);
   const [showConversationReview, setShowConversationReview] = useState(false);
+  const [showMemoryRomModal, setShowMemoryRomModal] = useState(false);
   const [isStatusExpanded, setIsStatusExpanded] = useState(false);
 
   // 4. 入力・通信ステート
@@ -73,6 +76,7 @@ export const ShoppingAIChat: React.FC<ShoppingAIChatProps> = ({
   const [showMemoryModal, setShowMemoryModal] = useState(false);
   const [manualMemoryId, setManualMemoryId] = useState('');
   const [copiedId, setCopiedId] = useState(false);
+  const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
 
   // 5. 写真相談用のステート
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
@@ -443,6 +447,35 @@ export const ShoppingAIChat: React.FC<ShoppingAIChatProps> = ({
     }
   };
 
+  // メッセージ内容のワンタップコピー
+  const handleCopyMessage = (id: string, text: string) => {
+    if (navigator.clipboard?.writeText) {
+      navigator.clipboard.writeText(text).catch(() => {
+        fallbackCopyText(text);
+      });
+    } else {
+      fallbackCopyText(text);
+    }
+    setCopiedMessageId(id);
+    setTimeout(() => setCopiedMessageId(null), 2000);
+  };
+
+  const fallbackCopyText = (text: string) => {
+    try {
+      const textArea = document.createElement('textarea');
+      textArea.value = text;
+      textArea.style.position = 'fixed';
+      textArea.style.opacity = '0';
+      document.body.appendChild(textArea);
+      textArea.focus();
+      textArea.select();
+      document.execCommand('copy');
+      document.body.removeChild(textArea);
+    } catch {
+      // ignore
+    }
+  };
+
   const handleStartOAuth = () => {
     const connectUrl = chatService.getMemoryConnectUrl
       ? chatService.getMemoryConnectUrl()
@@ -503,6 +536,19 @@ export const ShoppingAIChat: React.FC<ShoppingAIChatProps> = ({
                 <span>Memory</span>
               </button>
             )}
+
+            {/* 記憶（ROM一覧）ボタン */}
+            <button
+              type="button"
+              id="btn-open-memory-rom"
+              onClick={() => setShowMemoryRomModal(true)}
+              className="flex items-center gap-1 px-2.5 py-1 bg-stone-100 hover:bg-stone-200 text-stone-700 rounded-full text-[11px] font-medium transition-colors cursor-pointer active:scale-95"
+              title="Google Drive 記憶（ROM）管理"
+              aria-label="Google Drive 記憶管理"
+            >
+              <Database className="w-3.5 h-3.5 text-stone-600" />
+              <span>記憶</span>
+            </button>
 
             {/* セッション一覧・切り替えボタン */}
             <button
@@ -739,9 +785,41 @@ export const ShoppingAIChat: React.FC<ShoppingAIChatProps> = ({
               </div>
             )}
 
-            <span className="text-[10px] text-stone-400 mt-1 px-1">
-              {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-            </span>
+            {/* メッセージフッター（時刻 & ワンタップコピーボタン） */}
+            <div
+              className={`flex items-center gap-2 mt-1.5 px-1 text-[11px] text-stone-400 ${
+                msg.role === 'user' ? 'justify-end' : 'justify-start'
+              }`}
+            >
+              <button
+                type="button"
+                id={`btn-copy-msg-${msg.id}`}
+                onClick={() => handleCopyMessage(msg.id, msg.content)}
+                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full transition-all cursor-pointer active:scale-95 border text-xs shadow-2xs ${
+                  copiedMessageId === msg.id
+                    ? 'bg-emerald-50 text-emerald-700 border-emerald-300 font-medium'
+                    : 'bg-white text-stone-600 hover:text-stone-900 hover:bg-stone-100 border-stone-200'
+                }`}
+                title="メッセージ内容をワンタップでコピー"
+                aria-label="返信内容をコピー"
+              >
+                {copiedMessageId === msg.id ? (
+                  <>
+                    <Check className="w-3.5 h-3.5 text-emerald-600" />
+                    <span className="text-[10.5px]">コピー完了</span>
+                  </>
+                ) : (
+                  <>
+                    <Copy className="w-3.5 h-3.5 text-stone-400" />
+                    <span className="text-[10.5px]">コピー</span>
+                  </>
+                )}
+              </button>
+
+              <span className="text-[10px] text-stone-400 font-mono">
+                {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+              </span>
+            </div>
           </div>
         ))}
 
@@ -920,6 +998,7 @@ export const ShoppingAIChat: React.FC<ShoppingAIChatProps> = ({
         onDeleteSession={handleDeleteSession}
         onUpdateSessionStatus={handleUpdateSessionStatus}
         onRenameSession={handleRenameSession}
+        onOpenMemoryRom={() => setShowMemoryRomModal(true)}
       />
 
       {/* 7. 会話記録振り返りモーダル */}
@@ -995,6 +1074,18 @@ export const ShoppingAIChat: React.FC<ShoppingAIChatProps> = ({
                   </p>
 
                   <div className="pt-2 flex flex-col gap-2">
+                    <button
+                      type="button"
+                      id="btn-open-rom-from-memory-modal"
+                      onClick={() => {
+                        setShowMemoryModal(false);
+                        setShowMemoryRomModal(true);
+                      }}
+                      className="w-full py-2.5 px-4 bg-emerald-50 text-emerald-800 hover:bg-emerald-100 border border-emerald-200 rounded-xl font-medium text-sm transition-colors cursor-pointer flex items-center justify-center gap-2 active:scale-98"
+                    >
+                      <Database className="w-4 h-4 text-emerald-700" />
+                      <span>保存された記憶（ROM一覧）を確認</span>
+                    </button>
                     <button
                       type="button"
                       id="btn-disconnect-memory"
@@ -1169,6 +1260,16 @@ export const ShoppingAIChat: React.FC<ShoppingAIChatProps> = ({
           </div>
         </div>
       )}
+      {/* 11. Google Drive 記憶（ROM）管理モーダル */}
+      <MemoryRomModal
+        isOpen={showMemoryRomModal}
+        onClose={() => setShowMemoryRomModal(false)}
+        chatService={chatService}
+        memoryConnectionId={memoryConnectionId}
+        activeSessionId={activeSession?.id}
+        activeSessionTitle={activeSession?.title}
+        onOpenConnectModal={() => setShowMemoryModal(true)}
+      />
     </div>
   );
 };
