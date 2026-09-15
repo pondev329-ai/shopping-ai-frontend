@@ -133,6 +133,20 @@ export interface ListMemoryRomResult {
   totalCount?: number;
 }
 
+export interface DeleteMemoryRomParams {
+  connectionId?: string;
+  driveFileId: string;
+  itemType?: MemoryRomCategory | string;
+  sessionId?: string;
+  fileName?: string;
+}
+
+export interface DeleteMemoryRomResult {
+  success: boolean;
+  error?: string;
+  deletedDriveFileId?: string;
+}
+
 /**
  * バックエンドから返却された rawType や name から
  * 5つの正規化カテゴリ（session_rom / conversation_record / session_image / shared_rom / unknown）

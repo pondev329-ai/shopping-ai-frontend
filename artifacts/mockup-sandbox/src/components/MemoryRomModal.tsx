@@ -19,6 +19,8 @@ import {
   ExternalLink,
   Layers,
   Filter,
+  Trash2,
+  AlertTriangle,
 } from 'lucide-react';
 import {
   MemoryRomItem,
@@ -60,6 +62,12 @@ export const MemoryRomModal: React.FC<MemoryRomModalProps> = ({
   // コピー・展開状態
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [expandedItemId, setExpandedItemId] = useState<string | null>(null);
+
+  // 個別削除ステート
+  const [itemToDelete, setItemToDelete] = useState<MemoryRomItem | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [actionSuccessMessage, setActionSuccessMessage] = useState<string | null>(null);
 
   // 手動接続用（未接続時のフォールバック入力）
   const [manualConnectionId, setManualConnectionId] = useState('');
@@ -122,6 +130,57 @@ export const MemoryRomModal: React.FC<MemoryRomModalProps> = ({
     if (chatService.setMemoryConnectionId) {
       chatService.setMemoryConnectionId(manualConnectionId.trim());
       setManualConnectionId('');
+    }
+  };
+
+  // 個別ROM削除実行
+  const handleExecuteDelete = async () => {
+    if (!itemToDelete) return;
+    if (!chatService.deleteMemoryRomItem) {
+      setDeleteError('個別ROM削除機能が利用できません');
+      return;
+    }
+
+    const currentId =
+      memoryConnectionId ||
+      (chatService.getMemoryConnectionId ? chatService.getMemoryConnectionId() : null);
+
+    if (!currentId) {
+      setDeleteError('Google Driveが未接続です。先にGoogleアカウントを接続してください。');
+      return;
+    }
+
+    setIsDeleting(true);
+    setDeleteError(null);
+
+    try {
+      const res = await chatService.deleteMemoryRomItem({
+        connectionId: currentId,
+        driveFileId: itemToDelete.drive_file_id,
+        itemType: itemToDelete.item_type,
+        sessionId: itemToDelete.session_id,
+        fileName: itemToDelete.name,
+      });
+
+      if (res.success) {
+        // 成功: 一覧から対象項目を除外
+        setItems((prev) =>
+          prev.filter(
+            (i) =>
+              i.id !== itemToDelete.id &&
+              i.drive_file_id !== itemToDelete.drive_file_id
+          )
+        );
+        setActionSuccessMessage(`「${itemToDelete.name}」を削除しました`);
+        setTimeout(() => setActionSuccessMessage(null), 4000);
+        setItemToDelete(null);
+      } else {
+        setDeleteError(res.error || 'ROMの削除に失敗しました');
+      }
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : '削除通信中にエラーが発生しました');
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -517,6 +576,23 @@ export const MemoryRomModal: React.FC<MemoryRomModalProps> = ({
                 </div>
               )}
 
+              {/* 3.2.1 削除成功メッセージ表示 */}
+              {actionSuccessMessage && (
+                <div className="p-3 m-3 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-800 flex items-center justify-between gap-2 animate-in fade-in duration-150">
+                  <div className="flex items-center gap-1.5">
+                    <Check className="w-4 h-4 text-emerald-600 shrink-0" />
+                    <span className="font-medium">{actionSuccessMessage}</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setActionSuccessMessage(null)}
+                    className="text-emerald-600 hover:text-emerald-800 p-0.5 rounded cursor-pointer"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              )}
+
               {/* 3.3 リスト表示エリア */}
               <div className="p-3 space-y-2.5 flex-1">
                 {isLoading ? (
@@ -562,8 +638,8 @@ export const MemoryRomModal: React.FC<MemoryRomModalProps> = ({
                             </span>
                           </div>
 
-                          {/* セッション削除スコープ（固有 vs 共有） */}
-                          <div className="flex items-center gap-1">
+                          {/* セッション削除スコープ（固有 vs 共有） & 個別削除ボタン */}
+                          <div className="flex items-center gap-1.5">
                             {meta.isSessionScoped ? (
                               <span
                                 className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-50 text-amber-800 border border-amber-200"
@@ -579,6 +655,22 @@ export const MemoryRomModal: React.FC<MemoryRomModalProps> = ({
                                 {meta.scopeLabel}
                               </span>
                             )}
+
+                            {/* 個別削除ボタン */}
+                            <button
+                              type="button"
+                              id={`btn-delete-rom-${item.id}`}
+                              onClick={() => {
+                                setDeleteError(null);
+                                setItemToDelete(item);
+                              }}
+                              className="flex items-center gap-1 px-2 py-0.5 text-[10.5px] font-medium text-stone-500 hover:text-red-700 hover:bg-red-50 border border-stone-200 hover:border-red-200 rounded-md transition-colors cursor-pointer active:scale-95 shrink-0"
+                              title={`この記憶（${item.name}）を個別削除`}
+                              aria-label={`この記憶（${item.name}）を個別削除`}
+                            >
+                              <Trash2 className="w-3 h-3 text-stone-400 hover:text-red-600" />
+                              <span>削除</span>
+                            </button>
                           </div>
                         </div>
 
@@ -715,10 +807,144 @@ export const MemoryRomModal: React.FC<MemoryRomModalProps> = ({
             <strong className="text-stone-700 font-medium">「Session ROM」「Conversation Record」「Session Image」</strong>
             がGoogle Driveから安全に消去されます。チラシ等の
             <strong className="text-stone-700 font-medium">「Shared ROM」</strong>
-            は全セッション共有データとしてそのまま保持されます。
+            は全セッション共有データとしてそのまま保持されます。不要になった記憶は、各カードの「削除」ボタンから個別に安全に削除できます。
           </p>
         </div>
       </div>
+
+      {/* ========================================== */}
+      {/* 5. 個別ROM削除確認ダイアログ (Confirmation Modal) */}
+      {/* ========================================== */}
+      {itemToDelete && (
+        <div
+          id="modal-delete-rom-confirmation"
+          className="fixed inset-0 z-60 bg-black/75 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-150"
+          onClick={() => {
+            if (!isDeleting) {
+              setDeleteError(null);
+              setItemToDelete(null);
+            }
+          }}
+        >
+          <div
+            className="w-full max-w-md bg-white rounded-2xl border border-stone-200 shadow-2xl overflow-hidden p-5 space-y-4 animate-in zoom-in-95 duration-150"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 rounded-full bg-red-100 border border-red-200 flex items-center justify-center shrink-0 text-red-600">
+                <AlertTriangle className="w-5 h-5" />
+              </div>
+              <div className="space-y-1 flex-1 min-w-0">
+                <h3 className="text-base font-bold text-stone-900">
+                  記憶（ROM）の削除確認
+                </h3>
+                <p className="text-xs text-stone-500 leading-relaxed">
+                  Google Drive上のこの記憶データが削除されます。この操作は取り消せません。
+                </p>
+              </div>
+            </div>
+
+            {/* 対象アイテムの情報カード */}
+            <div className="bg-stone-50 rounded-xl p-3.5 border border-stone-200 space-y-2 text-xs">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span
+                  className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-semibold border ${
+                    (MEMORY_ROM_CATEGORIES[itemToDelete.item_type] || MEMORY_ROM_CATEGORIES.unknown).badgeBg
+                  } ${
+                    (MEMORY_ROM_CATEGORIES[itemToDelete.item_type] || MEMORY_ROM_CATEGORIES.unknown).badgeText
+                  } ${
+                    (MEMORY_ROM_CATEGORIES[itemToDelete.item_type] || MEMORY_ROM_CATEGORIES.unknown).badgeBorder
+                  }`}
+                >
+                  {renderCategoryIcon(itemToDelete.item_type, 'w-3 h-3')}
+                  <span>
+                    {(MEMORY_ROM_CATEGORIES[itemToDelete.item_type] || MEMORY_ROM_CATEGORIES.unknown).label}
+                  </span>
+                </span>
+                <span className="text-[11px] text-stone-500 font-medium">
+                  {(MEMORY_ROM_CATEGORIES[itemToDelete.item_type] || MEMORY_ROM_CATEGORIES.unknown).subtitle}
+                </span>
+              </div>
+
+              <div className="font-semibold text-stone-900 break-all text-xs">
+                {itemToDelete.name}
+              </div>
+
+              <div className="space-y-1 pt-1.5 border-t border-stone-200/60 font-mono text-[11px] text-stone-600">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-stone-400 font-sans shrink-0">file_id:</span>
+                  <span className="truncate max-w-[240px] text-[10.5px] bg-white px-1 py-0.5 rounded border border-stone-200">{itemToDelete.drive_file_id}</span>
+                </div>
+                {itemToDelete.session_id && (
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-stone-400 font-sans shrink-0">session_id:</span>
+                    <span className="truncate max-w-[240px] text-[10.5px] bg-white px-1 py-0.5 rounded border border-stone-200">{itemToDelete.session_id}</span>
+                  </div>
+                )}
+              </div>
+
+              {/* 削除スコープの説明 */}
+              <div className="pt-1.5 text-[11px] border-t border-stone-200/60 leading-relaxed">
+                {itemToDelete.item_type === 'shared_rom' ? (
+                  <span className="text-emerald-700">
+                    ※この共有ROM（チラシやレシピ等）のみを削除します。他のセッションデータには影響しません。
+                  </span>
+                ) : (
+                  <span className="text-stone-600">
+                    ※この個別記憶のみを削除します。セッション内の他の記憶やセッション自体は保持されます。
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {/* エラー表示 */}
+            {deleteError && (
+              <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-xs text-red-700 space-y-1">
+                <div className="font-semibold flex items-center gap-1.5">
+                  <AlertCircle className="w-4 h-4 text-red-600 shrink-0" />
+                  <span>削除エラー</span>
+                </div>
+                <p className="text-[11px] leading-relaxed break-words">{deleteError}</p>
+              </div>
+            )}
+
+            {/* アクションボタン */}
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button
+                type="button"
+                id="btn-cancel-delete-rom"
+                disabled={isDeleting}
+                onClick={() => {
+                  setDeleteError(null);
+                  setItemToDelete(null);
+                }}
+                className="px-4 py-2 bg-stone-100 hover:bg-stone-200 text-stone-700 rounded-xl text-xs font-medium transition-colors cursor-pointer disabled:opacity-50"
+              >
+                キャンセル
+              </button>
+              <button
+                type="button"
+                id="btn-confirm-delete-rom"
+                disabled={isDeleting}
+                onClick={handleExecuteDelete}
+                className="flex items-center gap-1.5 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-semibold shadow-xs transition-colors cursor-pointer disabled:opacity-50 active:scale-95"
+              >
+                {isDeleting ? (
+                  <>
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    <span>削除実行中...</span>
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>削除を実行する</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

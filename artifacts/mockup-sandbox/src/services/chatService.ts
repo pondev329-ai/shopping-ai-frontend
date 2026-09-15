@@ -3,6 +3,8 @@ import {
   MemoryRomItem,
   ListMemoryRomParams,
   ListMemoryRomResult,
+  DeleteMemoryRomParams,
+  DeleteMemoryRomResult,
   classifyMemoryRomType,
 } from '../types/memory';
 
@@ -24,6 +26,7 @@ export interface ChatService {
   disconnectMemory?(): Promise<void>;
   deleteMemorySession?(sessionId: string, connectionId?: string): Promise<{ success: boolean; error?: string }>;
   listMemoryRom?(params?: ListMemoryRomParams): Promise<ListMemoryRomResult>;
+  deleteMemoryRomItem?(params: DeleteMemoryRomParams): Promise<DeleteMemoryRomResult>;
   onMemoryConnectionChange?(callback: (id: string | null) => void): () => void;
   getMemoryConnectUrl?(): string;
 }
@@ -493,6 +496,108 @@ export class RenderBackendChatAdapter implements ChatService {
       return {
         success: false,
         items: [],
+        error: `通信エラー: ${errMsg}`,
+      };
+    }
+  }
+
+  /**
+   * Google Drive Memory上の個別ROMデータを削除します。
+   * Flow: Frontend -> Render /memory/rom/delete -> Memory Runner -> Memory Flow delete_rom -> Google Drive
+   * 
+   * 送信ペイロード:
+   * {
+   *   "memory_connection_id": "<現在接続中のGoogle Drive connection id>",
+   *   "drive_file_id": "<削除対象のGoogle Drive file_id>",
+   *   "item_type": "<任意: ROMカテゴリ>",
+   *   "session_id": "<任意: セッションID>"
+   * }
+   */
+  async deleteMemoryRomItem(params: DeleteMemoryRomParams): Promise<DeleteMemoryRomResult> {
+    const activeConnectionId = params.connectionId ?? this.memoryConnectionId;
+    if (!activeConnectionId) {
+      return {
+        success: false,
+        error: 'Google Drive Memoryが未接続です。先にGoogleアカウントを接続してください。',
+      };
+    }
+
+    if (!params.driveFileId) {
+      return {
+        success: false,
+        error: '削除対象の drive_file_id が指定されていません。',
+      };
+    }
+
+    const deleteUrl = `${this.baseUrl}/memory/rom/delete`;
+    const payload: Record<string, unknown> = {
+      memory_connection_id: activeConnectionId,
+      drive_file_id: params.driveFileId,
+    };
+    if (params.itemType) {
+      payload.item_type = params.itemType;
+    }
+    if (params.sessionId) {
+      payload.session_id = params.sessionId;
+    }
+    if (params.fileName) {
+      payload.name = params.fileName;
+    }
+
+    try {
+      const response = await fetch(deleteUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        if (response.status === 404) {
+          return {
+            success: false,
+            error:
+              'バックエンドAPI（POST /memory/rom/delete）が未配備です。個別ROM削除の実行にはRender側（Memory Flow / Runner）の削除エンドポイントが必要です。',
+          };
+        }
+
+        let errorDetail = `HTTP ${response.status}`;
+        try {
+          const errData = await response.json();
+          if (errData.detail || errData.error || errData.message) {
+            errorDetail = errData.detail || errData.error || errData.message;
+          }
+        } catch {
+          try {
+            const errText = await response.text();
+            if (errText) errorDetail = errText;
+          } catch {
+            // ignore
+          }
+        }
+        return {
+          success: false,
+          error: `ROM削除に失敗しました (${errorDetail})`,
+        };
+      }
+
+      const resData = await response.json().catch(() => ({ ok: true }));
+      if (resData && (resData.ok === false || resData.success === false)) {
+        return {
+          success: false,
+          error: resData.error || resData.message || resData.detail || 'ROM削除に失敗しました',
+        };
+      }
+
+      return {
+        success: true,
+        deletedDriveFileId: params.driveFileId,
+      };
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : 'ネットワーク通信エラー';
+      return {
+        success: false,
         error: `通信エラー: ${errMsg}`,
       };
     }
