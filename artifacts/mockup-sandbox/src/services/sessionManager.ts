@@ -56,6 +56,8 @@ export function createNewSession(customTitle?: string): ShoppingSession {
     createdAt: Date.now(),
     updatedAt: Date.now(),
     status: 'in_progress',
+    currentScene: 'planning',
+    expertMode: null,
     restoreState: null,
     conversationRecord: [INITIAL_GREETING_MESSAGE],
     statusSummary: createDefaultStatusSummary(),
@@ -87,6 +89,9 @@ export function extractStatusSummary(
           id: o.id,
           title: o.title,
           summary: o.summary,
+          reasons: o.reasons,
+          prepTimeMinutes: o.prepTimeMinutes,
+          requiresShopping: o.requiresShopping,
         }));
       }
     }
@@ -99,6 +104,8 @@ export function extractStatusSummary(
   const sessionCtx = backendState.session_context as {
     priorities?: string[];
     shopping_or_home?: string;
+    decided?: string[];
+    undecided?: string[];
   } | undefined;
 
   if (sessionCtx?.priorities && Array.isArray(sessionCtx.priorities) && sessionCtx.priorities.length > 0) {
@@ -110,7 +117,18 @@ export function extractStatusSummary(
 
   // 2. 現在の候補 (possibility_context.meal_options)
   const possibilityCtx = backendState.possibility_context as {
-    meal_options?: Array<{ id?: string; title?: string; name?: string; summary?: string; description?: string }>;
+    meal_options?: Array<{
+      id?: string;
+      title?: string;
+      name?: string;
+      summary?: string;
+      description?: string;
+      reasons?: string[];
+      prep_time_minutes?: number;
+      prepTimeMinutes?: number;
+      requires_shopping?: boolean;
+      requiresShopping?: boolean;
+    }>;
     ingredients?: Array<{ name?: string; label?: string } | string>;
     recipe_catalog?: Array<{ title?: string; name?: string }>;
     offers?: Array<{ title?: string; name?: string; price?: number }>;
@@ -121,6 +139,9 @@ export function extractStatusSummary(
       id: opt.id || `candidate-${i}`,
       title: opt.title || opt.name || `候補 ${i + 1}`,
       summary: opt.summary || opt.description,
+      reasons: opt.reasons,
+      prepTimeMinutes: opt.prep_time_minutes ?? opt.prepTimeMinutes,
+      requiresShopping: opt.requires_shopping ?? opt.requiresShopping,
     }));
   }
 
@@ -128,6 +149,11 @@ export function extractStatusSummary(
   const shoppingCtx = backendState.shopping_context as {
     inventory?: string[];
     selected_product_ids?: string[];
+    progress?: {
+      total?: number;
+      collected?: number;
+      step?: string;
+    };
   } | undefined;
 
   if (shoppingCtx?.inventory && shoppingCtx.inventory.length > 0) {
@@ -148,14 +174,26 @@ export function extractStatusSummary(
   }
 
   // 4. 決まったこと & まだ決まっていないこと
-  if (shoppingCtx?.selected_product_ids && shoppingCtx.selected_product_ids.length > 0) {
+  if (sessionCtx?.decided && Array.isArray(sessionCtx.decided) && sessionCtx.decided.length > 0) {
+    summary.decided.push(...sessionCtx.decided);
+  } else if (shoppingCtx?.selected_product_ids && shoppingCtx.selected_product_ids.length > 0) {
     summary.decided.push(`購入候補決定: ${shoppingCtx.selected_product_ids.length}件の商品`);
   }
 
-  if (summary.candidates.length > 0) {
+  if (sessionCtx?.undecided && Array.isArray(sessionCtx.undecided) && sessionCtx.undecided.length > 0) {
+    summary.undecided.push(...sessionCtx.undecided);
+  } else if (summary.candidates.length > 0) {
     summary.undecided.push(`提示された ${summary.candidates.length} つの候補からの選択`);
   } else {
     summary.undecided.push('献立・買い物方針の絞り込み');
+  }
+
+  if (shoppingCtx?.progress) {
+    summary.shoppingProgress = {
+      totalItems: shoppingCtx.progress.total,
+      collectedItems: shoppingCtx.progress.collected,
+      stepDescription: shoppingCtx.progress.step,
+    };
   }
 
   if (summary.situation.length === 0) {
@@ -179,8 +217,13 @@ export function loadAllSessions(): { sessions: ShoppingSession[]; activeSessionI
     if (rawSessions) {
       const parsed: ShoppingSession[] = JSON.parse(rawSessions);
       if (Array.isArray(parsed) && parsed.length > 0) {
-        const currentActive = parsed.find((s) => s.id === activeId) ? (activeId as string) : parsed[0].id;
-        return { sessions: parsed, activeSessionId: currentActive };
+        const normalized = parsed.map((s) => ({
+          ...s,
+          currentScene: s.currentScene || 'planning',
+          expertMode: s.expertMode ?? null,
+        }));
+        const currentActive = normalized.find((s) => s.id === activeId) ? (activeId as string) : normalized[0].id;
+        return { sessions: normalized, activeSessionId: currentActive };
       }
     }
 

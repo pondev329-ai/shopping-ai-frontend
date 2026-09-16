@@ -1,5 +1,13 @@
 export type MessageRole = 'user' | 'assistant' | 'system';
 
+/**
+ * Main Flowが認識している現在のシーン
+ * - planning: 食事や買い物について机や自宅で考えている段階
+ * - shopping: スーパーなどの売り場で実際に買い物をしている段階
+ * - after_shopping: 買い物から帰宅し、キッチンで食材を使って食事につなげる段階
+ */
+export type AppScene = 'planning' | 'shopping' | 'after_shopping';
+
 export interface DecisionFactor {
   label: string;
   value: string;
@@ -39,10 +47,18 @@ export interface ChatMessage {
   timestamp: number;
   imageUrl?: string;
   decisionData?: InlineDecisionPayload;
+  /** 応答時のシーン */
+  sceneAtMessage?: AppScene;
+  /** 応答時の専門家モード */
+  expertAtMessage?: string | null;
 }
 
 export interface ChatResponse {
   text: string;
   decisionData?: InlineDecisionPayload;
   rawBackendState?: Record<string, unknown>;
+  /** Main Flowから渡された現在のシーン */
+  currentScene?: AppScene;
+  /** Main Flowから渡された専門家モード */
+  expertMode?: string | null;
 }

@@ -19,6 +19,8 @@ import {
   Utensils,
   Plus,
   Database,
+  MessageSquare,
+  BookOpen,
 } from 'lucide-react';
 import { ChatMessage, SuggestionOption } from '../types/chat';
 import { ShoppingSession } from '../types/session';
@@ -31,7 +33,8 @@ import {
   extractStatusSummary,
   INITIAL_GREETING_MESSAGE,
 } from '../services/sessionManager';
-import { StatusSummaryCard } from './StatusSummaryCard';
+import { CompanionCharacter } from './CompanionCharacter';
+import { StatusPossibilityBoard } from './StatusPossibilityBoard';
 import { SessionDrawer } from './SessionDrawer';
 import { ConversationReviewModal } from './ConversationReviewModal';
 import { MemoryRomModal } from './MemoryRomModal';
@@ -328,12 +331,18 @@ export const ShoppingAIChat: React.FC<ShoppingAIChatProps> = ({
         activeSession.id
       );
 
+      // Main Flowから渡された current_scene と expert_mode の更新
+      const updatedScene = response.currentScene ?? activeSession.currentScene ?? 'planning';
+      const updatedExpert = response.expertMode !== undefined ? response.expertMode : (activeSession.expertMode ?? null);
+
       const aiMessage: ChatMessage = {
         id: `msg-${Date.now()}-ai`,
         role: 'assistant',
         content: response.text,
         timestamp: Date.now(),
         decisionData: response.decisionData,
+        sceneAtMessage: updatedScene,
+        expertAtMessage: updatedExpert,
       };
 
       const updatedRecordWithAi = [...newRecord, aiMessage];
@@ -356,6 +365,8 @@ export const ShoppingAIChat: React.FC<ShoppingAIChatProps> = ({
                 conversationRecord: updatedRecordWithAi,
                 restoreState: newRestoreState,
                 statusSummary: newStatusSummary,
+                currentScene: updatedScene,
+                expertMode: updatedExpert,
                 updatedAt: Date.now(),
               }
             : s
@@ -486,31 +497,50 @@ export const ShoppingAIChat: React.FC<ShoppingAIChatProps> = ({
   // メイン画面に表示する「現在のやり取り」の抽出
   // 通常画面は長大なチャットログ画面ではなく、「アシスタントとの最新の対話」を中心に据える
   const recentDisplayMessages =
-    conversationRecord.length > 4 ? conversationRecord.slice(-4) : conversationRecord;
+    conversationRecord.length > 3 ? conversationRecord.slice(-3) : conversationRecord;
   const pastMessageCount = conversationRecord.length - recentDisplayMessages.length;
+  const latestAssistantMsg = [...conversationRecord].reverse().find((m) => m.role === 'assistant');
 
   return (
     <div
       id="shopping-ai-root"
-      className="flex flex-col h-[100dvh] w-full max-w-lg mx-auto bg-stone-50 text-stone-900 overflow-hidden font-sans border-x border-stone-200 shadow-sm"
+      className="flex flex-col h-[100dvh] w-full max-w-4xl lg:max-w-5xl mx-auto bg-stone-100/60 text-stone-900 overflow-hidden font-sans border-x border-stone-200 shadow-sm"
     >
-      {/* 1. Header (Mobile First & Companion Bar) */}
+      {/* 1. Header (Mobile First & Scene/Session Bar) */}
       <header
         id="chat-header"
-        className="px-4 py-2.5 bg-white/95 backdrop-blur border-b border-stone-200 sticky top-0 z-10 shrink-0"
+        className="px-3.5 sm:px-4 py-2 bg-white/95 backdrop-blur border-b border-stone-200 sticky top-0 z-10 shrink-0"
       >
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2 min-w-0">
-            <div className="w-8 h-8 rounded-full bg-emerald-600 text-white flex items-center justify-center font-bold text-sm shadow-xs shrink-0">
-              <Sparkles className="w-4 h-4" />
+            <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-emerald-600 text-white flex items-center justify-center font-bold text-xs sm:text-sm shadow-xs shrink-0">
+              <Sparkles className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
             </div>
             <div className="min-w-0">
-              <h1 className="text-sm font-semibold text-stone-900 leading-tight">Shopping AI</h1>
-              <p className="text-[11px] text-stone-500 truncate">買い物・意思決定アシスタント</p>
+              <div className="flex items-center gap-1.5">
+                <h1 className="text-xs sm:text-sm font-bold text-stone-900 leading-tight">Shopping AI</h1>
+                {/* 現在のシーンバッジ */}
+                {activeSession.currentScene === 'shopping' && (
+                  <span className="inline-flex items-center gap-0.5 px-1.5 py-0.2 text-[10px] font-semibold rounded bg-emerald-100 text-emerald-800 border border-emerald-300">
+                    <ShoppingBag className="w-2.5 h-2.5" /> 買物中
+                  </span>
+                )}
+                {activeSession.currentScene === 'after_shopping' && (
+                  <span className="inline-flex items-center gap-0.5 px-1.5 py-0.2 text-[10px] font-semibold rounded bg-amber-100 text-amber-800 border border-amber-300">
+                    <Utensils className="w-2.5 h-2.5" /> 帰宅・調理
+                  </span>
+                )}
+                {(!activeSession.currentScene || activeSession.currentScene === 'planning') && (
+                  <span className="inline-flex items-center gap-0.5 px-1.5 py-0.2 text-[10px] font-semibold rounded bg-stone-100 text-stone-700 border border-stone-300">
+                    <BookOpen className="w-2.5 h-2.5" /> 献立計画
+                  </span>
+                )}
+              </div>
+              <p className="text-[10px] sm:text-[11px] text-stone-500 truncate">状況・可能性・進行状態ナビゲーション</p>
             </div>
           </div>
 
-          <div className="flex items-center gap-1.5 shrink-0">
+          <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
             {/* Google Drive Memory ボタン */}
             {memoryConnectionId ? (
               <button
@@ -522,7 +552,7 @@ export const ShoppingAIChat: React.FC<ShoppingAIChatProps> = ({
               >
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
                 <HardDrive className="w-3 h-3 text-emerald-700" />
-                <span>Memory</span>
+                <span className="hidden sm:inline">Memory</span>
               </button>
             ) : (
               <button
@@ -533,7 +563,7 @@ export const ShoppingAIChat: React.FC<ShoppingAIChatProps> = ({
                 title="Google Drive Memory を接続"
               >
                 <HardDrive className="w-3 h-3 text-stone-500" />
-                <span>Memory</span>
+                <span className="hidden sm:inline">Memory</span>
               </button>
             )}
 
@@ -542,7 +572,7 @@ export const ShoppingAIChat: React.FC<ShoppingAIChatProps> = ({
               type="button"
               id="btn-open-memory-rom"
               onClick={() => setShowMemoryRomModal(true)}
-              className="flex items-center gap-1 px-2.5 py-1 bg-stone-100 hover:bg-stone-200 text-stone-700 rounded-full text-[11px] font-medium transition-colors cursor-pointer active:scale-95"
+              className="flex items-center gap-1 px-2 sm:px-2.5 py-1 bg-stone-100 hover:bg-stone-200 text-stone-700 rounded-full text-[11px] font-medium transition-colors cursor-pointer active:scale-95"
               title="Google Drive 記憶（ROM）管理"
               aria-label="Google Drive 記憶管理"
             >
@@ -550,12 +580,25 @@ export const ShoppingAIChat: React.FC<ShoppingAIChatProps> = ({
               <span>記憶</span>
             </button>
 
+            {/* 対話ログ全体（Conversation Review） */}
+            <button
+              type="button"
+              id="btn-open-conversation-history"
+              onClick={() => setShowConversationReview(true)}
+              className="flex items-center gap-1 px-2 sm:px-2.5 py-1 bg-stone-100 hover:bg-stone-200 text-stone-700 rounded-full text-[11px] font-medium transition-colors cursor-pointer active:scale-95"
+              title="対話履歴を全件確認"
+              aria-label="対話履歴全件確認"
+            >
+              <History className="w-3.5 h-3.5 text-stone-600" />
+              <span className="hidden sm:inline">対話記録</span>
+            </button>
+
             {/* セッション一覧・切り替えボタン */}
             <button
               type="button"
               id="btn-open-session-drawer"
               onClick={() => setShowSessionDrawer(true)}
-              className="flex items-center gap-1.5 px-2.5 py-1 bg-stone-100 hover:bg-emerald-50 hover:text-emerald-800 hover:border-emerald-200 border border-stone-200 text-stone-700 rounded-full text-xs font-medium transition-colors cursor-pointer active:scale-95"
+              className="flex items-center gap-1.5 px-2 sm:px-2.5 py-1 bg-stone-100 hover:bg-emerald-50 hover:text-emerald-800 hover:border-emerald-200 border border-stone-200 text-stone-700 rounded-full text-xs font-medium transition-colors cursor-pointer active:scale-95"
               title="セッション一覧・切り替え"
               aria-label="セッション一覧・切り替え"
             >
@@ -568,7 +611,7 @@ export const ShoppingAIChat: React.FC<ShoppingAIChatProps> = ({
         {/* 2. 現在のセッション表示バー (Current Session Indicator) */}
         <div
           id="current-session-bar"
-          className="mt-2 pt-2 border-t border-stone-100 flex items-center justify-between gap-2"
+          className="mt-1.5 pt-1.5 border-t border-stone-100 flex items-center justify-between gap-2"
         >
           <button
             type="button"
@@ -581,7 +624,7 @@ export const ShoppingAIChat: React.FC<ShoppingAIChatProps> = ({
                 activeSession.status === 'in_progress' ? 'bg-emerald-500 animate-pulse' : 'bg-stone-400'
               }`}
             />
-            <span className="text-xs font-semibold text-stone-800 truncate max-w-[200px] sm:max-w-xs group-hover:text-emerald-700">
+            <span className="text-xs font-semibold text-stone-800 truncate max-w-[200px] sm:max-w-md group-hover:text-emerald-700">
               {activeSession.title}
             </span>
             <span className="text-[10px] text-stone-400 font-mono shrink-0">{activeSession.date}</span>
@@ -611,34 +654,81 @@ export const ShoppingAIChat: React.FC<ShoppingAIChatProps> = ({
         </div>
       </header>
 
-      {/* 3. ステータスボード（今日の状況、現在の候補、現在の可能性、決まったこと、未決定事項） */}
-      <StatusSummaryCard
-        summary={activeSession.statusSummary}
-        sessionTitle={activeSession.title}
-        isExpanded={isStatusExpanded}
-        onToggleExpand={() => setIsStatusExpanded((prev) => !prev)}
-        onSelectCandidate={(title) => handleSend(`「${title}」について詳しく教えてください。`)}
-      />
-
-      {/* 4. メイン領域：アシスタントとの現在の対話 */}
-      <main
-        id="chat-messages-container"
-        className="flex-1 overflow-y-auto p-4 space-y-3.5 overscroll-contain bg-stone-50"
+      {/* 3. 画面上部（全体の約2/3）：キャラクター（左側）＆ ステータス・可能性ボード（右側） */}
+      <section
+        id="stage-upper-overview"
+        aria-label="状況・可能性・進行状態"
+        className="shrink-0 max-h-[50vh] sm:max-h-[55vh] overflow-y-auto p-2.5 sm:p-3.5 bg-stone-100/70 border-b border-stone-200/80 space-y-3"
       >
-        {/* 会話を振り返る導線（過去ログがある場合） */}
-        {pastMessageCount > 0 && (
-          <div className="flex justify-center my-1">
-            <button
-              type="button"
-              id="btn-review-past-conversations"
-              onClick={() => setShowConversationReview(true)}
-              className="inline-flex items-center gap-1.5 px-3 py-1 bg-white hover:bg-stone-100 active:bg-stone-200 border border-stone-200 text-stone-600 rounded-full text-xs font-medium transition-colors shadow-2xs cursor-pointer active:scale-95"
-            >
-              <History className="w-3.5 h-3.5 text-stone-500" />
-              <span>前の会話を振り返る（過去 {pastMessageCount} 件）</span>
-            </button>
+        <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-stretch">
+          {/* 左側：キャラクター（状況・進行ナビゲーション） */}
+          <div className="md:col-span-5 flex flex-col">
+            <CompanionCharacter
+              scene={activeSession.currentScene || 'planning'}
+              expertMode={activeSession.expertMode}
+              latestAssistantMessage={latestAssistantMsg?.content}
+              isTyping={isTyping}
+              onQuickPrompt={(txt) => handleSend(txt)}
+            />
           </div>
-        )}
+
+          {/* 右側：ステータス・可能性ボード */}
+          <div className="md:col-span-7 flex flex-col">
+            <StatusPossibilityBoard
+              summary={activeSession.statusSummary}
+              scene={activeSession.currentScene || 'planning'}
+              onSelectCandidate={(candidateTitle) =>
+                handleSend(`「${candidateTitle}」について詳しく教えてください。`)
+              }
+            />
+          </div>
+        </div>
+      </section>
+
+      {/* 4. 画面下部（全体の約1/3）：チャット・対話領域 */}
+      <section
+        id="stage-lower-dialogue"
+        aria-label="アシスタントとの対話領域"
+        className="flex-1 flex flex-col min-h-0 bg-white"
+      >
+        {/* 対話領域ヘッダー */}
+        <div className="px-3.5 py-1.5 border-b border-stone-100 flex items-center justify-between bg-stone-50/70 shrink-0">
+          <div className="flex items-center gap-1.5 text-xs font-semibold text-stone-700">
+            <MessageSquare className="w-3.5 h-3.5 text-emerald-600" />
+            <span>現在のやり取り</span>
+          </div>
+
+          <button
+            type="button"
+            id="btn-view-conversation-record-top"
+            onClick={() => setShowConversationReview(true)}
+            className="flex items-center gap-1 text-[11px] text-stone-500 hover:text-stone-800 font-medium px-2 py-0.5 rounded-md hover:bg-stone-200/60 transition-colors cursor-pointer"
+            title="過去のやり取りを全件確認"
+          >
+            <History className="w-3.5 h-3.5 text-stone-500" />
+            <span>対話履歴 ({conversationRecord.length}件)</span>
+          </button>
+        </div>
+
+        {/* チャットメッセージ表示部 */}
+        <main
+          id="chat-messages-container"
+          className="flex-1 overflow-y-auto p-3 sm:p-4 space-y-3 overscroll-contain bg-stone-50/40"
+        >
+          {/* 会話を振り返る導線（過去ログがある場合） */}
+          {pastMessageCount > 0 && (
+            <div className="flex justify-center my-1">
+              <button
+                type="button"
+                id="btn-review-past-conversations"
+                onClick={() => setShowConversationReview(true)}
+                className="inline-flex items-center gap-1.5 px-3 py-1 bg-white hover:bg-stone-100 active:bg-stone-200 border border-stone-200 text-stone-600 rounded-full text-xs font-medium transition-colors shadow-2xs cursor-pointer active:scale-95"
+              >
+                <History className="w-3.5 h-3.5 text-stone-500" />
+                <span>これまでの会話履歴（過去 {pastMessageCount} 件）を見る</span>
+              </button>
+            </div>
+          )}
 
         {/* 振り返り用ボタン（全ログを見たい時用、常にアクセス可能） */}
         {pastMessageCount === 0 && conversationRecord.length > 1 && (
@@ -664,12 +754,28 @@ export const ShoppingAIChat: React.FC<ShoppingAIChatProps> = ({
           >
             {/* Balloon */}
             <div
-              className={`max-w-[90%] rounded-2xl px-4 py-3 text-[14.5px] leading-relaxed break-words whitespace-pre-wrap ${
+              className={`relative max-w-[90%] rounded-2xl px-4 py-3 text-[14.5px] leading-relaxed break-words whitespace-pre-wrap ${
                 msg.role === 'user'
                   ? 'bg-emerald-600 text-white rounded-tr-xs shadow-xs font-normal'
-                  : 'bg-white text-stone-800 border border-stone-200 rounded-tl-xs shadow-2xs'
+                  : 'bg-white text-stone-800 border border-stone-200 rounded-tl-xs shadow-2xs group'
               }`}
             >
+              {msg.role === 'assistant' && (
+                <button
+                  type="button"
+                  id={`btn-balloon-copy-${msg.id}`}
+                  onClick={() => handleCopyMessage(msg.id, msg.content)}
+                  className="absolute top-2 right-2 p-1.5 rounded-lg bg-stone-50 hover:bg-emerald-50 text-stone-400 hover:text-emerald-700 border border-stone-200 transition-colors cursor-pointer shadow-2xs"
+                  title="ワンタップで返信をコピー"
+                  aria-label="返信をコピー"
+                >
+                  {copiedMessageId === msg.id ? (
+                    <Check className="w-3.5 h-3.5 text-emerald-600" />
+                  ) : (
+                    <Copy className="w-3.5 h-3.5" />
+                  )}
+                </button>
+              )}
               {msg.imageUrl && (
                 <div className="mb-2.5 overflow-hidden rounded-xl bg-black/15">
                   <img
@@ -986,6 +1092,7 @@ export const ShoppingAIChat: React.FC<ShoppingAIChatProps> = ({
           </button>
         </form>
       </footer>
+      </section>
 
       {/* 6. セッション管理ドロワー */}
       <SessionDrawer

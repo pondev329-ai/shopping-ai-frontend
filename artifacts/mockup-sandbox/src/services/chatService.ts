@@ -1,4 +1,4 @@
-import { ChatMessage, ChatResponse, InlineDecisionPayload, SuggestionOption } from '../types/chat';
+import { ChatMessage, ChatResponse, InlineDecisionPayload, SuggestionOption, AppScene } from '../types/chat';
 import {
   MemoryRomItem,
   ListMemoryRomParams,
@@ -39,7 +39,13 @@ interface JinbaBackendRunResponse {
   result?: {
     reply?: string;
     parse_success?: boolean;
+    current_scene?: string;
+    expert_mode?: string | null;
     state?: {
+      current_scene?: string;
+      expert_mode?: string | null;
+      scene?: string;
+      expert?: string | null;
       history?: Array<{ role: string; content: string }>;
       possibility_context?: {
         meal_options?: Array<{
@@ -64,13 +70,25 @@ interface JinbaBackendRunResponse {
           name?: string;
           url?: string;
         }>;
+        ingredients?: Array<unknown>;
+        offers?: Array<unknown>;
       };
       session_context?: {
         priorities?: string[];
         shopping_or_home?: string;
+        current_scene?: string;
+        expert_mode?: string | null;
+        decided?: string[];
+        undecided?: string[];
       };
       shopping_context?: {
         inventory?: string[];
+        selected_product_ids?: string[];
+        progress?: {
+          total?: number;
+          collected?: number;
+          step?: string;
+        };
       };
     };
   };
@@ -706,10 +724,50 @@ export class RenderBackendChatAdapter implements ChatService {
     const replyText = data.result.reply || '応答を受け付けました。';
     const decisionData = this.extractDecisionData(data.result);
 
+    // Main Flowから渡された current_scene の抽出（planning / shopping / after_shopping）
+    const rawScene =
+      data.result.current_scene ||
+      data.result.state?.current_scene ||
+      data.result.state?.session_context?.current_scene ||
+      data.result.state?.scene;
+
+    let currentScene: AppScene | undefined = undefined;
+    if (typeof rawScene === 'string') {
+      const lower = rawScene.toLowerCase();
+      if (lower.includes('after') || lower.includes('kitchen') || lower.includes('home_cooking') || lower.includes('帰宅')) {
+        currentScene = 'after_shopping';
+      } else if (lower.includes('shop') || lower.includes('supermarket') || lower.includes('買い')) {
+        currentScene = 'shopping';
+      } else if (lower.includes('plan') || lower.includes('desk') || lower.includes('相談') || lower.includes('献立')) {
+        currentScene = 'planning';
+      }
+    }
+
+    // Main Flowから渡された expert_mode の抽出
+    const rawExpert =
+      data.result.expert_mode !== undefined
+        ? data.result.expert_mode
+        : data.result.state?.expert_mode !== undefined
+        ? data.result.state?.expert_mode
+        : data.result.state?.session_context?.expert_mode !== undefined
+        ? data.result.state?.session_context?.expert_mode
+        : data.result.state?.expert;
+
+    let expertMode: string | null | undefined = undefined;
+    if (rawExpert !== undefined) {
+      if (typeof rawExpert === 'string' && rawExpert.trim()) {
+        expertMode = rawExpert.trim();
+      } else if (rawExpert === null || rawExpert === 'none' || rawExpert === false) {
+        expertMode = null;
+      }
+    }
+
     return {
       text: replyText,
       decisionData,
       rawBackendState: data.result.state as Record<string, unknown> | undefined,
+      currentScene,
+      expertMode,
     };
   }
 
