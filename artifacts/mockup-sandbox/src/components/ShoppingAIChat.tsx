@@ -33,8 +33,8 @@ import {
   extractStatusSummary,
   INITIAL_GREETING_MESSAGE,
 } from '../services/sessionManager';
-import { CompanionCharacter } from './CompanionCharacter';
-import { StatusPossibilityBoard } from './StatusPossibilityBoard';
+import { CompanionSceneStage } from './CompanionSceneStage';
+import { StatusDetailModal } from './StatusDetailModal';
 import { SessionDrawer } from './SessionDrawer';
 import { ConversationReviewModal } from './ConversationReviewModal';
 import { MemoryRomModal } from './MemoryRomModal';
@@ -68,6 +68,7 @@ export const ShoppingAIChat: React.FC<ShoppingAIChatProps> = ({
   const [showSessionDrawer, setShowSessionDrawer] = useState(false);
   const [showConversationReview, setShowConversationReview] = useState(false);
   const [showMemoryRomModal, setShowMemoryRomModal] = useState(false);
+  const [showStatusDetailModal, setShowStatusDetailModal] = useState(false);
   const [isStatusExpanded, setIsStatusExpanded] = useState(false);
 
   // 4. 入力・通信ステート
@@ -654,35 +655,21 @@ export const ShoppingAIChat: React.FC<ShoppingAIChatProps> = ({
         </div>
       </header>
 
-      {/* 3. 画面上部（全体の約2/3）：キャラクター（左側）＆ ステータス・可能性ボード（右側） */}
+      {/* 3. メイン画面の主役：現在のシーン＋キャラクター（画面上部を大胆に占有） */}
       <section
-        id="stage-upper-overview"
-        aria-label="状況・可能性・進行状態"
-        className="shrink-0 max-h-[50vh] sm:max-h-[55vh] overflow-y-auto p-2.5 sm:p-3.5 bg-stone-100/70 border-b border-stone-200/80 space-y-3"
+        id="stage-scene-main"
+        aria-label="現在のシーンとキャラクター"
+        className="shrink-0 p-2 sm:p-3 bg-stone-100 border-b border-stone-200"
       >
-        <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-stretch">
-          {/* 左側：キャラクター（状況・進行ナビゲーション） */}
-          <div className="md:col-span-5 flex flex-col">
-            <CompanionCharacter
-              scene={activeSession.currentScene || 'planning'}
-              expertMode={activeSession.expertMode}
-              latestAssistantMessage={latestAssistantMsg?.content}
-              isTyping={isTyping}
-              onQuickPrompt={(txt) => handleSend(txt)}
-            />
-          </div>
-
-          {/* 右側：ステータス・可能性ボード */}
-          <div className="md:col-span-7 flex flex-col">
-            <StatusPossibilityBoard
-              summary={activeSession.statusSummary}
-              scene={activeSession.currentScene || 'planning'}
-              onSelectCandidate={(candidateTitle) =>
-                handleSend(`「${candidateTitle}」について詳しく教えてください。`)
-              }
-            />
-          </div>
-        </div>
+        <CompanionSceneStage
+          scene={activeSession.currentScene || 'planning'}
+          expertMode={activeSession.expertMode}
+          statusSummary={activeSession.statusSummary}
+          latestAssistantMessage={latestAssistantMsg?.content}
+          isTyping={isTyping}
+          onOpenStatusDetail={() => setShowStatusDetailModal(true)}
+          onQuickPrompt={(txt) => handleSend(txt)}
+        />
       </section>
 
       {/* 4. 画面下部（全体の約1/3）：チャット・対話領域 */}
@@ -1093,6 +1080,18 @@ export const ShoppingAIChat: React.FC<ShoppingAIChatProps> = ({
         </form>
       </footer>
       </section>
+
+      {/* 5.5 ステータス詳細モーダル（脇役のステータス概要タップで展開） */}
+      <StatusDetailModal
+        isOpen={showStatusDetailModal}
+        onClose={() => setShowStatusDetailModal(false)}
+        summary={activeSession.statusSummary}
+        scene={activeSession.currentScene || 'planning'}
+        sessionTitle={activeSession.title}
+        onSelectCandidate={(candidateTitle) =>
+          handleSend(`「${candidateTitle}」について詳しく教えてください。`)
+        }
+      />
 
       {/* 6. セッション管理ドロワー */}
       <SessionDrawer
