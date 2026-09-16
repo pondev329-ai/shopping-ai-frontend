@@ -37,24 +37,24 @@ export const StatusPossibilityBoard: React.FC<StatusPossibilityBoardProps> = ({
     <div
       id="status-possibility-board"
       aria-label="状況・可能性・進行状態ボード"
-      className="bg-white rounded-2xl border border-stone-200 shadow-2xs p-3.5 sm:p-4 flex flex-col justify-between transition-all"
+      className="bg-white dark:bg-stone-900 rounded-2xl border border-stone-200 dark:border-stone-800 shadow-2xs p-3.5 sm:p-4 flex flex-col justify-between transition-all"
     >
       {/* 1. ヘッダー: 認識状況 & タブ切り替え */}
-      <div className="flex items-center justify-between gap-2 pb-2.5 border-b border-stone-100">
+      <div className="flex items-center justify-between gap-2 pb-2.5 border-b border-stone-100 dark:border-stone-800">
         <div className="flex items-center gap-1.5 min-w-0">
-          <Layers className="w-4 h-4 text-emerald-700 shrink-0" />
-          <h2 className="text-xs font-bold text-stone-900 truncate">現在の認識と可能性</h2>
+          <Layers className="w-4 h-4 text-emerald-700 dark:text-emerald-400 shrink-0" />
+          <h2 className="text-xs font-bold text-stone-900 dark:text-stone-100 truncate">現在の認識と可能性</h2>
         </div>
 
         {/* タブ切り替え */}
-        <div className="flex items-center gap-1 bg-stone-100 p-0.5 rounded-lg text-[11px] font-medium text-stone-600">
+        <div className="flex items-center gap-1 bg-stone-100 dark:bg-stone-800 p-0.5 rounded-lg text-[11px] font-medium text-stone-600 dark:text-stone-300">
           <button
             type="button"
             onClick={() => setActiveTab('candidates')}
             className={`px-2 py-0.5 rounded-md transition-colors cursor-pointer ${
               activeTab === 'candidates'
-                ? 'bg-white text-stone-900 shadow-2xs font-semibold'
-                : 'hover:text-stone-900'
+                ? 'bg-white dark:bg-stone-700 text-stone-900 dark:text-stone-100 shadow-2xs font-semibold'
+                : 'hover:text-stone-900 dark:hover:text-stone-100'
             }`}
           >
             候補 ({candidateCount})
@@ -64,8 +64,8 @@ export const StatusPossibilityBoard: React.FC<StatusPossibilityBoardProps> = ({
             onClick={() => setActiveTab('decisions')}
             className={`px-2 py-0.5 rounded-md transition-colors cursor-pointer ${
               activeTab === 'decisions'
-                ? 'bg-white text-stone-900 shadow-2xs font-semibold'
-                : 'hover:text-stone-900'
+                ? 'bg-white dark:bg-stone-700 text-stone-900 dark:text-stone-100 shadow-2xs font-semibold'
+                : 'hover:text-stone-900 dark:hover:text-stone-100'
             }`}
           >
             決定/未定
@@ -75,8 +75,8 @@ export const StatusPossibilityBoard: React.FC<StatusPossibilityBoardProps> = ({
             onClick={() => setActiveTab('possibilities')}
             className={`px-2 py-0.5 rounded-md transition-colors cursor-pointer ${
               activeTab === 'possibilities'
-                ? 'bg-white text-stone-900 shadow-2xs font-semibold'
-                : 'hover:text-stone-900'
+                ? 'bg-white dark:bg-stone-700 text-stone-900 dark:text-stone-100 shadow-2xs font-semibold'
+                : 'hover:text-stone-900 dark:hover:text-stone-100'
             }`}
           >
             手持ち・条件
@@ -87,14 +87,14 @@ export const StatusPossibilityBoard: React.FC<StatusPossibilityBoardProps> = ({
       {/* 2. 前提・状況タグ（常にコンパクトに把握できる帯） */}
       {summary.situation && summary.situation.length > 0 && (
         <div className="py-2 flex items-center gap-1.5 overflow-x-auto text-[11px] no-scrollbar">
-          <span className="text-stone-400 font-medium shrink-0 flex items-center gap-1">
-            <Clock className="w-3 h-3 text-stone-400" />
+          <span className="text-stone-400 dark:text-stone-500 font-medium shrink-0 flex items-center gap-1">
+            <Clock className="w-3 h-3 text-stone-400 dark:text-stone-500" />
             前提:
           </span>
           {summary.situation.map((item, idx) => (
             <span
               key={idx}
-              className="inline-flex items-center px-2 py-0.5 rounded-md bg-stone-50 border border-stone-200 text-stone-700 shrink-0 font-normal"
+              className="inline-flex items-center px-2 py-0.5 rounded-md bg-stone-50 dark:bg-stone-800/80 border border-stone-200 dark:border-stone-700 text-stone-700 dark:text-stone-200 shrink-0 font-normal"
             >
               {item}
             </span>
@@ -112,28 +112,28 @@ export const StatusPossibilityBoard: React.FC<StatusPossibilityBoardProps> = ({
                 <div
                   key={cand.id}
                   id={`candidate-card-${cand.id}`}
-                  className="bg-stone-50/90 hover:bg-stone-100/80 border border-stone-200 hover:border-emerald-400 rounded-xl p-2.5 transition-all group"
+                  className="bg-stone-50/90 dark:bg-stone-800/80 hover:bg-stone-100/80 dark:hover:bg-stone-750 border border-stone-200 dark:border-stone-700 hover:border-emerald-400 dark:hover:border-emerald-500 rounded-xl p-2.5 transition-all group"
                 >
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
                       <div className="flex items-center gap-2">
-                        <h3 className="text-xs font-bold text-stone-900 group-hover:text-emerald-800 transition-colors">
+                        <h3 className="text-xs font-bold text-stone-900 dark:text-stone-100 group-hover:text-emerald-800 dark:group-hover:text-emerald-300 transition-colors">
                           {cand.title}
                         </h3>
                         {cand.prepTimeMinutes && (
-                          <span className="inline-flex items-center gap-0.5 text-[10px] text-stone-500 bg-white border border-stone-200 px-1.5 py-0.2 rounded font-mono">
+                          <span className="inline-flex items-center gap-0.5 text-[10px] text-stone-500 dark:text-stone-400 bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 px-1.5 py-0.2 rounded font-mono">
                             約{cand.prepTimeMinutes}分
                           </span>
                         )}
                         {cand.requiresShopping !== undefined && (
-                          <span className="text-[10px] text-stone-500 bg-white border border-stone-200 px-1.5 py-0.2 rounded">
+                          <span className="text-[10px] text-stone-500 dark:text-stone-400 bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 px-1.5 py-0.2 rounded">
                             {cand.requiresShopping ? '買い足しあり' : '手持ちで可能'}
                           </span>
                         )}
                       </div>
 
                       {cand.summary && (
-                        <p className="text-[11px] text-stone-600 mt-1 leading-snug">
+                        <p className="text-[11px] text-stone-600 dark:text-stone-300 mt-1 leading-snug">
                           {cand.summary}
                         </p>
                       )}
@@ -144,7 +144,7 @@ export const StatusPossibilityBoard: React.FC<StatusPossibilityBoardProps> = ({
                           {cand.reasons.map((r, ri) => (
                             <span
                               key={ri}
-                              className="text-[10px] bg-white border border-stone-200 text-stone-600 px-1.5 py-0.5 rounded"
+                              className="text-[10px] bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 text-stone-600 dark:text-stone-300 px-1.5 py-0.5 rounded"
                             >
                               ✓ {r}
                             </span>
@@ -159,7 +159,7 @@ export const StatusPossibilityBoard: React.FC<StatusPossibilityBoardProps> = ({
                         type="button"
                         id={`btn-ask-candidate-${cand.id}`}
                         onClick={() => onSelectCandidate(cand.title, 'detail')}
-                        className="shrink-0 p-1 rounded-lg bg-white border border-stone-200 text-stone-400 group-hover:text-emerald-700 group-hover:border-emerald-300 transition-colors cursor-pointer shadow-2xs"
+                        className="shrink-0 p-1 rounded-lg bg-white dark:bg-stone-700 border border-stone-200 dark:border-stone-600 text-stone-400 dark:text-stone-300 group-hover:text-emerald-700 dark:group-hover:text-emerald-300 group-hover:border-emerald-300 dark:group-hover:border-emerald-500 transition-colors cursor-pointer shadow-2xs"
                         title="この候補についてアシスタントに相談"
                         aria-label={`${cand.title}について相談`}
                       >
@@ -170,10 +170,10 @@ export const StatusPossibilityBoard: React.FC<StatusPossibilityBoardProps> = ({
                 </div>
               ))
             ) : (
-              <div className="text-center py-6 text-stone-400 text-xs">
+              <div className="text-center py-6 text-stone-400 dark:text-stone-500 text-xs">
                 <Utensils className="w-6 h-6 mx-auto mb-1.5 opacity-40" />
                 <p>現在提示できる候補を整理中です。</p>
-                <p className="text-[11px] text-stone-500 mt-0.5">
+                <p className="text-[11px] text-stone-500 dark:text-stone-400 mt-0.5">
                   「〇〇分の時短で」「手持ちの卵を使いたい」など話しかけてみてください。
                 </p>
               </div>
@@ -186,8 +186,8 @@ export const StatusPossibilityBoard: React.FC<StatusPossibilityBoardProps> = ({
           <div className="space-y-3">
             {/* 決まったこと */}
             <div>
-              <div className="flex items-center gap-1 text-[11px] font-bold text-emerald-800 mb-1.5">
-                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+              <div className="flex items-center gap-1 text-[11px] font-bold text-emerald-800 dark:text-emerald-300 mb-1.5">
+                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
                 <span>決まったこと ({decidedCount})</span>
               </div>
               {decidedCount > 0 ? (
@@ -195,15 +195,15 @@ export const StatusPossibilityBoard: React.FC<StatusPossibilityBoardProps> = ({
                   {summary.decided.map((item, idx) => (
                     <div
                       key={idx}
-                      className="p-1.5 px-2 bg-emerald-50/70 border border-emerald-200 rounded-lg text-xs text-emerald-950 flex items-start gap-1.5"
+                      className="p-1.5 px-2 bg-emerald-50/70 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800/80 rounded-lg text-xs text-emerald-950 dark:text-emerald-200 flex items-start gap-1.5"
                     >
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 mt-1.5 shrink-0" />
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 dark:bg-emerald-400 mt-1.5 shrink-0" />
                       <span className="leading-snug">{item}</span>
                     </div>
                   ))}
                 </div>
               ) : (
-                <div className="p-2 bg-stone-50 rounded-lg text-[11px] text-stone-400">
+                <div className="p-2 bg-stone-50 dark:bg-stone-800/70 rounded-lg text-[11px] text-stone-400 dark:text-stone-500">
                   まだ確定した項目はありません。候補を比較しながら決められます。
                 </div>
               )}
@@ -211,8 +211,8 @@ export const StatusPossibilityBoard: React.FC<StatusPossibilityBoardProps> = ({
 
             {/* まだ決まっていないこと */}
             <div>
-              <div className="flex items-center gap-1 text-[11px] font-bold text-amber-800 mb-1.5">
-                <HelpCircle className="w-3.5 h-3.5 text-amber-600" />
+              <div className="flex items-center gap-1 text-[11px] font-bold text-amber-800 dark:text-amber-300 mb-1.5">
+                <HelpCircle className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
                 <span>まだ決まっていないこと ({undecidedCount})</span>
               </div>
               {undecidedCount > 0 ? (
@@ -220,15 +220,15 @@ export const StatusPossibilityBoard: React.FC<StatusPossibilityBoardProps> = ({
                   {summary.undecided.map((item, idx) => (
                     <div
                       key={idx}
-                      className="p-1.5 px-2 bg-amber-50/70 border border-amber-200 rounded-lg text-xs text-amber-950 flex items-start gap-1.5"
+                      className="p-1.5 px-2 bg-amber-50/70 dark:bg-amber-950/60 border border-amber-200 dark:border-amber-800/80 rounded-lg text-xs text-amber-950 dark:text-amber-200 flex items-start gap-1.5"
                     >
-                      <span className="w-1.5 h-1.5 rounded-full bg-amber-500 mt-1.5 shrink-0" />
+                      <span className="w-1.5 h-1.5 rounded-full bg-amber-500 dark:bg-amber-400 mt-1.5 shrink-0" />
                       <span className="leading-snug">{item}</span>
                     </div>
                   ))}
                 </div>
               ) : (
-                <div className="p-2 bg-stone-50 rounded-lg text-[11px] text-stone-400">
+                <div className="p-2 bg-stone-50 dark:bg-stone-800/70 rounded-lg text-[11px] text-stone-400 dark:text-stone-500">
                   すべての条件が明確になっています。
                 </div>
               )}
@@ -239,8 +239,8 @@ export const StatusPossibilityBoard: React.FC<StatusPossibilityBoardProps> = ({
         {/* C. 手持ち食材 & 現在の可能性 (Possibilities) */}
         {activeTab === 'possibilities' && (
           <div className="space-y-2.5">
-            <div className="text-[11px] font-bold text-stone-700 flex items-center gap-1">
-              <Sparkles className="w-3.5 h-3.5 text-stone-500" />
+            <div className="text-[11px] font-bold text-stone-700 dark:text-stone-300 flex items-center gap-1">
+              <Sparkles className="w-3.5 h-3.5 text-stone-500 dark:text-stone-400" />
               <span>利用可能な可能性・前提材料</span>
             </div>
 
@@ -249,24 +249,24 @@ export const StatusPossibilityBoard: React.FC<StatusPossibilityBoardProps> = ({
                 {summary.possibilities.map((p, idx) => (
                   <div
                     key={idx}
-                    className="p-2 bg-stone-50 border border-stone-200 rounded-lg text-xs text-stone-800 leading-snug"
+                    className="p-2 bg-stone-50 dark:bg-stone-800/90 border border-stone-200 dark:border-stone-700 rounded-lg text-xs text-stone-800 dark:text-stone-200 leading-snug"
                   >
                     {p}
                   </div>
                 ))}
               </div>
             ) : (
-              <div className="text-center py-4 text-stone-400 text-xs">
+              <div className="text-center py-4 text-stone-400 dark:text-stone-500 text-xs">
                 特売情報や手持ちの食材を共有すると、ここに反映されます。
               </div>
             )}
 
             {/* 買い物進行状態がある場合 */}
             {summary.shoppingProgress && (
-              <div className="mt-2 p-2 bg-emerald-50 border border-emerald-200 rounded-lg text-xs">
-                <div className="flex items-center justify-between text-emerald-950 font-semibold mb-1">
+              <div className="mt-2 p-2 bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 rounded-lg text-xs">
+                <div className="flex items-center justify-between text-emerald-950 dark:text-emerald-200 font-semibold mb-1">
                   <span className="flex items-center gap-1">
-                    <ShoppingBag className="w-3.5 h-3.5 text-emerald-700" />
+                    <ShoppingBag className="w-3.5 h-3.5 text-emerald-700 dark:text-emerald-400" />
                     お買物進行状況
                   </span>
                   <span>
@@ -274,7 +274,7 @@ export const StatusPossibilityBoard: React.FC<StatusPossibilityBoardProps> = ({
                   </span>
                 </div>
                 {summary.shoppingProgress.stepDescription && (
-                  <p className="text-[11px] text-emerald-800 mt-0.5">
+                  <p className="text-[11px] text-emerald-800 dark:text-emerald-300 mt-0.5">
                     {summary.shoppingProgress.stepDescription}
                   </p>
                 )}
@@ -285,7 +285,7 @@ export const StatusPossibilityBoard: React.FC<StatusPossibilityBoardProps> = ({
       </div>
 
       {/* 4. フッターヒント（AIが勝手に決めず、ユーザーが判断できる方針） */}
-      <div className="pt-2 mt-1 border-t border-stone-100 flex items-center justify-between text-[10.5px] text-stone-400">
+      <div className="pt-2 mt-1 border-t border-stone-100 dark:border-stone-800 flex items-center justify-between text-[10.5px] text-stone-400 dark:text-stone-500">
         <span>タップして各候補について相談できます</span>
         <span className="font-mono text-[10px]">
           {candidateCount}候補 / {decidedCount}決定

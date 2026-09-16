@@ -73,25 +73,25 @@ export const SessionDrawer: React.FC<SessionDrawerProps> = ({
     >
       <div
         id="session-drawer-panel"
-        className="w-full sm:max-w-lg max-h-[90vh] bg-white rounded-t-3xl sm:rounded-2xl border border-stone-200 shadow-2xl flex flex-col overflow-hidden animate-in slide-in-from-bottom duration-200"
+        className="w-full sm:max-w-lg max-h-[90vh] bg-white dark:bg-stone-900 rounded-t-3xl sm:rounded-2xl border border-stone-200 dark:border-stone-800 shadow-2xl flex flex-col overflow-hidden animate-in slide-in-from-bottom duration-200"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-stone-200 bg-stone-50/90 shrink-0">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-stone-200 dark:border-stone-800 bg-stone-50/90 dark:bg-stone-900/95 shrink-0">
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 rounded-lg bg-emerald-600 text-white flex items-center justify-center shadow-2xs">
               <Layers className="w-4 h-4" />
             </div>
             <div>
-              <h2 className="text-base font-semibold text-stone-900 leading-tight">セッション管理</h2>
-              <p className="text-xs text-stone-500">食事・買い物の検討単位を切り替え</p>
+              <h2 className="text-base font-semibold text-stone-900 dark:text-stone-100 leading-tight">セッション管理</h2>
+              <p className="text-xs text-stone-500 dark:text-stone-400">食事・買い物の検討単位を切り替え</p>
             </div>
           </div>
           <button
             type="button"
             id="btn-close-session-drawer"
             onClick={onClose}
-            className="p-1.5 text-stone-400 hover:text-stone-700 rounded-full hover:bg-stone-200/60 transition-colors cursor-pointer"
+            className="p-1.5 text-stone-400 hover:text-stone-700 dark:text-stone-500 dark:hover:text-stone-200 rounded-full hover:bg-stone-200/60 dark:hover:bg-stone-800 transition-colors cursor-pointer"
             aria-label="セッション画面を閉じる"
           >
             <X className="w-5 h-5" />
@@ -99,7 +99,7 @@ export const SessionDrawer: React.FC<SessionDrawerProps> = ({
         </div>
 
         {/* Action Button: Create New Session */}
-        <div className="p-4 border-b border-stone-100 bg-white shrink-0">
+        <div className="p-4 border-b border-stone-100 dark:border-stone-800 bg-white dark:bg-stone-900 shrink-0">
           <button
             type="button"
             id="btn-create-new-session"
@@ -118,7 +118,7 @@ export const SessionDrawer: React.FC<SessionDrawerProps> = ({
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
           {/* 1. 進行中のセッション */}
           <div>
-            <h3 className="text-xs font-semibold text-stone-500 uppercase tracking-wider mb-2 px-1 flex items-center gap-1.5">
+            <h3 className="text-xs font-semibold text-stone-500 dark:text-stone-400 uppercase tracking-wider mb-2 px-1 flex items-center gap-1.5">
               <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
               進行中のセッション ({activeSessions.length})
             </h3>
@@ -149,9 +149,9 @@ export const SessionDrawer: React.FC<SessionDrawerProps> = ({
 
           {/* 2. 完了・過去のセッション */}
           {completedSessions.length > 0 && (
-            <div className="pt-2 border-t border-stone-100">
-              <h3 className="text-xs font-semibold text-stone-500 uppercase tracking-wider mb-2 px-1 flex items-center gap-1.5">
-                <CheckCircle2 className="w-3.5 h-3.5 text-stone-400" />
+            <div className="pt-2 border-t border-stone-100 dark:border-stone-800">
+              <h3 className="text-xs font-semibold text-stone-500 dark:text-stone-400 uppercase tracking-wider mb-2 px-1 flex items-center gap-1.5">
+                <CheckCircle2 className="w-3.5 h-3.5 text-stone-400 dark:text-stone-500" />
                 完了・過去のセッション ({completedSessions.length})
               </h3>
               <div className="space-y-2">
@@ -183,9 +183,9 @@ export const SessionDrawer: React.FC<SessionDrawerProps> = ({
 
         {/* Google Drive Memory ROM 管理へのリンク */}
         {onOpenMemoryRom && (
-          <div className="px-5 py-2.5 bg-stone-100/70 border-t border-stone-200 flex items-center justify-between shrink-0">
-            <div className="text-[11px] text-stone-600 font-medium flex items-center gap-1.5">
-              <HardDrive className="w-3.5 h-3.5 text-stone-500" />
+          <div className="px-5 py-2.5 bg-stone-100/70 dark:bg-stone-800/80 border-t border-stone-200 dark:border-stone-700 flex items-center justify-between shrink-0">
+            <div className="text-[11px] text-stone-600 dark:text-stone-300 font-medium flex items-center gap-1.5">
+              <HardDrive className="w-3.5 h-3.5 text-stone-500 dark:text-stone-400" />
               <span>Google Drive 記憶（ROM）</span>
             </div>
             <button
@@ -195,7 +195,7 @@ export const SessionDrawer: React.FC<SessionDrawerProps> = ({
                 onClose();
                 onOpenMemoryRom();
               }}
-              className="text-xs font-medium text-emerald-700 hover:text-emerald-800 flex items-center gap-1 cursor-pointer hover:underline"
+              className="text-xs font-medium text-emerald-700 dark:text-emerald-400 hover:text-emerald-800 dark:hover:text-emerald-300 flex items-center gap-1 cursor-pointer hover:underline"
             >
               <span>記憶一覧を確認</span>
               <ChevronRight className="w-3.5 h-3.5" />
@@ -204,7 +204,7 @@ export const SessionDrawer: React.FC<SessionDrawerProps> = ({
         )}
 
         {/* Footer Note */}
-        <div className="px-5 py-3 bg-stone-50 border-t border-stone-200 text-[11px] text-stone-500 shrink-0">
+        <div className="px-5 py-3 bg-stone-50 dark:bg-stone-900 border-t border-stone-200 dark:border-stone-800 text-[11px] text-stone-500 dark:text-stone-400 shrink-0">
           セッションを再開すると、当時の「状況・候補・可能性」の状態が復元されます。
         </div>
       </div>
@@ -223,36 +223,36 @@ export const SessionDrawer: React.FC<SessionDrawerProps> = ({
         >
           <div
             id="modal-delete-confirm-card"
-            className="w-full max-w-sm bg-white rounded-2xl p-5 border border-stone-200 shadow-2xl space-y-4"
+            className="w-full max-w-sm bg-white dark:bg-stone-900 rounded-2xl p-5 border border-stone-200 dark:border-stone-800 shadow-2xl space-y-4"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center gap-3 text-rose-600">
-              <div className="w-10 h-10 rounded-full bg-rose-50 flex items-center justify-center shrink-0">
+            <div className="flex items-center gap-3 text-rose-600 dark:text-rose-400">
+              <div className="w-10 h-10 rounded-full bg-rose-50 dark:bg-rose-950/60 flex items-center justify-center shrink-0">
                 <AlertTriangle className="w-5 h-5" />
               </div>
               <div>
-                <h4 className="font-semibold text-stone-900 text-sm">セッションを削除しますか？</h4>
-                <p className="text-xs text-rose-600 font-medium">この操作は元に戻せません</p>
+                <h4 className="font-semibold text-stone-900 dark:text-stone-100 text-sm">セッションを削除しますか？</h4>
+                <p className="text-xs text-rose-600 dark:text-rose-400 font-medium">この操作は元に戻せません</p>
               </div>
             </div>
 
-            <div className="p-3 bg-stone-50 rounded-xl border border-stone-200 text-xs text-stone-600 space-y-1">
-              <div className="font-medium text-stone-800 truncate">「{sessionToDelete.title}」</div>
-              <p className="text-[11px] text-stone-500 leading-relaxed">
-                ※ このセッションの復元データ（Session Restore State）、対話記録（Conversation Record）、およびGoogle Drive Memory上のセッションROMデータが削除されます。（チラシ等の共有ROMは保持されます）
+            <div className="p-3 bg-stone-50 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 rounded-xl text-xs text-stone-600 dark:text-stone-300 space-y-1">
+              <div className="font-medium text-stone-800 dark:text-stone-200 truncate">「{sessionToDelete.title}」</div>
+              <p className="text-[11px] text-stone-500 dark:text-stone-400 leading-relaxed">
+                ※ このセッションの復元データ（Session Restore State）および対話記録（Conversation Record）が削除されます。（Google Drive Memory接続中の場合は関連するセッションROMデータも削除されます）
               </p>
             </div>
 
             {deleteError && (
               <div
                 id="delete-session-error-banner"
-                className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-700 space-y-1 animate-in fade-in duration-150"
+                className="p-3 bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-900 rounded-xl text-xs text-rose-700 dark:text-rose-300 space-y-1 animate-in fade-in duration-150"
               >
                 <div className="font-semibold flex items-center gap-1.5">
-                  <AlertTriangle className="w-3.5 h-3.5 text-rose-600 shrink-0" />
+                  <AlertTriangle className="w-3.5 h-3.5 text-rose-600 dark:text-rose-400 shrink-0" />
                   削除に失敗しました
                 </div>
-                <div className="text-[11px] text-rose-600 leading-relaxed break-words">{deleteError}</div>
+                <div className="text-[11px] text-rose-600 dark:text-rose-300 leading-relaxed break-words">{deleteError}</div>
               </div>
             )}
 
@@ -265,7 +265,7 @@ export const SessionDrawer: React.FC<SessionDrawerProps> = ({
                   setSessionToDelete(null);
                   setDeleteError(null);
                 }}
-                className="flex-1 py-2 text-xs font-medium text-stone-600 bg-stone-100 hover:bg-stone-200 disabled:opacity-50 rounded-xl transition-colors cursor-pointer"
+                className="flex-1 py-2 text-xs font-medium text-stone-600 dark:text-stone-300 bg-stone-100 dark:bg-stone-800 hover:bg-stone-200 dark:hover:bg-stone-700 disabled:opacity-50 rounded-xl transition-colors cursor-pointer"
               >
                 キャンセル
               </button>
@@ -335,8 +335,8 @@ const SessionItemCard: React.FC<SessionItemCardProps> = ({
       id={`session-card-${session.id}`}
       className={`p-3.5 rounded-xl border transition-all ${
         isActive
-          ? 'bg-emerald-50/60 border-emerald-400 ring-1 ring-emerald-400/40 shadow-xs'
-          : 'bg-white hover:bg-stone-50/90 border-stone-200 shadow-2xs'
+          ? 'bg-emerald-50/60 dark:bg-emerald-950/40 border-emerald-400 dark:border-emerald-600 ring-1 ring-emerald-400/40 dark:ring-emerald-600/40 shadow-xs'
+          : 'bg-white dark:bg-stone-800/80 hover:bg-stone-50/90 dark:hover:bg-stone-750 border-stone-200 dark:border-stone-700 shadow-2xs'
       }`}
     >
       <div className="flex items-start justify-between gap-2">
@@ -352,13 +352,13 @@ const SessionItemCard: React.FC<SessionItemCardProps> = ({
                   if (e.key === 'Enter') onSaveRename();
                   if (e.key === 'Escape') onSaveRename();
                 }}
-                className="text-xs font-semibold px-2 py-1 bg-white border border-emerald-500 rounded-md focus:outline-hidden w-full text-stone-900"
+                className="text-xs font-semibold px-2 py-1 bg-white dark:bg-stone-900 border border-emerald-500 rounded-md focus:outline-hidden w-full text-stone-900 dark:text-stone-100"
                 autoFocus
               />
               <button
                 type="button"
                 onClick={onSaveRename}
-                className="p-1 text-emerald-700 hover:bg-emerald-100 rounded cursor-pointer"
+                className="p-1 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-950/60 rounded cursor-pointer"
                 title="保存"
               >
                 <Check className="w-3.5 h-3.5" />
@@ -366,11 +366,11 @@ const SessionItemCard: React.FC<SessionItemCardProps> = ({
             </div>
           ) : (
             <div className="flex items-center gap-1.5 mb-1">
-              <h4 className="font-semibold text-stone-900 text-xs truncate">{session.title}</h4>
+              <h4 className="font-semibold text-stone-900 dark:text-stone-100 text-xs truncate">{session.title}</h4>
               <button
                 type="button"
                 onClick={onStartRename}
-                className="p-0.5 text-stone-400 hover:text-stone-700 rounded cursor-pointer shrink-0"
+                className="p-0.5 text-stone-400 dark:text-stone-500 hover:text-stone-700 dark:hover:text-stone-200 rounded cursor-pointer shrink-0"
                 title="名前を変更"
               >
                 <Edit2 className="w-3 h-3" />
@@ -379,26 +379,26 @@ const SessionItemCard: React.FC<SessionItemCardProps> = ({
           )}
 
           {/* Meta row (Date, Status badge, Candidates count) */}
-          <div className="flex flex-wrap items-center gap-2 text-[11px] text-stone-500">
+          <div className="flex flex-wrap items-center gap-2 text-[11px] text-stone-500 dark:text-stone-400">
             <span className="inline-flex items-center gap-1">
-              <Calendar className="w-3 h-3 text-stone-400" />
+              <Calendar className="w-3 h-3 text-stone-400 dark:text-stone-500" />
               {session.date}
             </span>
             <span className="inline-flex items-center gap-1">
-              <Clock className="w-3 h-3 text-stone-400" />
+              <Clock className="w-3 h-3 text-stone-400 dark:text-stone-500" />
               {new Date(session.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
             </span>
             {session.status === 'in_progress' ? (
-              <span className="px-1.5 py-0.2 rounded bg-emerald-100 text-emerald-800 font-medium text-[10px]">
+              <span className="px-1.5 py-0.2 rounded bg-emerald-100 dark:bg-emerald-950/80 text-emerald-800 dark:text-emerald-300 font-medium text-[10px]">
                 進行中
               </span>
             ) : (
-              <span className="px-1.5 py-0.2 rounded bg-stone-100 text-stone-600 font-medium text-[10px]">
+              <span className="px-1.5 py-0.2 rounded bg-stone-100 dark:bg-stone-700 text-stone-600 dark:text-stone-300 font-medium text-[10px]">
                 完了
               </span>
             )}
             {candidateCount > 0 && (
-              <span className="text-stone-600 bg-stone-100 px-1.5 py-0.2 rounded text-[10px]">
+              <span className="text-stone-600 dark:text-stone-300 bg-stone-100 dark:bg-stone-700 px-1.5 py-0.2 rounded text-[10px]">
                 候補 {candidateCount}件
               </span>
             )}
@@ -413,8 +413,8 @@ const SessionItemCard: React.FC<SessionItemCardProps> = ({
             onClick={onToggleStatus}
             className={`p-1.5 rounded-lg border text-xs transition-colors cursor-pointer ${
               session.status === 'completed'
-                ? 'bg-stone-100 text-stone-700 border-stone-200 hover:bg-stone-200'
-                : 'bg-white text-stone-600 border-stone-200 hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-200'
+                ? 'bg-stone-100 dark:bg-stone-700 text-stone-700 dark:text-stone-300 border-stone-200 dark:border-stone-600 hover:bg-stone-200 dark:hover:bg-stone-600'
+                : 'bg-white dark:bg-stone-800 text-stone-600 dark:text-stone-300 border-stone-200 dark:border-stone-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/60 hover:text-emerald-700 dark:hover:text-emerald-300 hover:border-emerald-200 dark:hover:border-emerald-700'
             }`}
             title={session.status === 'completed' ? '進行中に戻す' : '完了にする'}
           >
@@ -444,7 +444,7 @@ const SessionItemCard: React.FC<SessionItemCardProps> = ({
             type="button"
             id={`btn-delete-session-${session.id}`}
             onClick={onRequestDelete}
-            className="p-1.5 text-stone-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer ml-0.5"
+            className="p-1.5 text-stone-400 dark:text-stone-500 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/50 rounded-lg transition-colors cursor-pointer ml-0.5"
             title="セッションを削除"
           >
             <Trash2 className="w-3.5 h-3.5" />

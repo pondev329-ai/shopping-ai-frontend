@@ -21,10 +21,8 @@ interface CompanionSceneStageProps {
   scene: AppScene;
   expertMode?: string | null;
   statusSummary?: SessionStatusSummary;
-  latestAssistantMessage?: string;
   isTyping?: boolean;
   onOpenStatusDetail: () => void;
-  onQuickPrompt?: (text: string) => void;
 }
 
 /**
@@ -89,10 +87,8 @@ export const CompanionSceneStage: React.FC<CompanionSceneStageProps> = ({
   scene,
   expertMode,
   statusSummary,
-  latestAssistantMessage,
   isTyping = false,
   onOpenStatusDetail,
-  onQuickPrompt,
 }) => {
   const expertMeta = getExpertMeta(expertMode);
 
@@ -101,51 +97,23 @@ export const CompanionSceneStage: React.FC<CompanionSceneStageProps> = ({
     planning: {
       name: '自宅・リビング（献立計画中）',
       chipLabel: '📝 献立相談',
-      characterRole: '今日の相談役（ポコ太）',
-      defaultCue: '今夜の献立、一緒に考えよう！「20分で作りたい」「冷蔵庫に豚肉があるよ」など教えてね。',
-      quickPrompts: [
-        '短時間（20分以内）で作れる候補は？',
-        '冷蔵庫の余り物を使い切りたい',
-        'がっつり主菜とさっぱり副菜の組み合わせ',
-      ],
+      characterRole: '今日の相談役',
     },
     shopping: {
       name: 'スーパーマーケット店内（お買い物中）',
       chipLabel: '🛒 買物中',
-      characterRole: 'お買物ナビゲーター（ポコ太）',
-      defaultCue: 'スーパーに到着！売り場で迷ったら、写真や値札を見せてね。どっちがお得か一緒に見極めるよ！',
-      quickPrompts: [
-        'この特売シールのお肉、今夜使える？',
-        '買い足すべき野菜は何？',
-        'いまカゴに入れたもので代用できる？',
-      ],
+      characterRole: 'お買物ナビゲーター',
     },
     after_shopping: {
       name: 'キッチン・調理台（帰宅・調理前）',
       chipLabel: '🍳 調理前',
-      characterRole: 'キッチン調理パートナー（ポコ太）',
-      defaultCue: '買い物お疲れさま！買ってきた食材を使って、一番楽な手順でちゃちゃっと作っちゃおう！',
-      quickPrompts: [
-        'まず何から切り始める？',
-        '余った食材はどう保存するのが正解？',
-        'フライパンひとつでできる手順は？',
-      ],
+      characterRole: 'キッチン調理パートナー',
     },
   }[scene] || {
     name: '献立・買い物相談',
     chipLabel: '📝 相談中',
-    characterRole: '相談役（ポコ太）',
-    defaultCue: '今日の食事について何でも聞いてね！',
-    quickPrompts: ['今日の提案を教えて'],
+    characterRole: '相談役',
   };
-
-  // アシスタントからの最新メッセージの抜粋（吹き出し用）
-  const displaySpeech = latestAssistantMessage
-    ? latestAssistantMessage
-        .replace(/^[#\s*]+/, '')
-        .split('\n')[0]
-        .slice(0, 95)
-    : sceneConfig.defaultCue;
 
   // 脇役としてのステータス概要サマリー
   const candidateCount = statusSummary?.candidates?.length || 0;
@@ -159,7 +127,7 @@ export const CompanionSceneStage: React.FC<CompanionSceneStageProps> = ({
     <div
       id="companion-scene-stage"
       aria-label="現在のシーンとアシスタントキャラクター"
-      className="relative w-full h-[46vh] min-h-[300px] max-h-[440px] rounded-3xl overflow-hidden shadow-md select-none border border-stone-200/90 transition-all"
+      className="relative w-full h-[38vh] sm:h-[42vh] min-h-[250px] max-h-[400px] rounded-2xl sm:rounded-3xl overflow-hidden shadow-sm select-none border border-stone-200/90 dark:border-stone-800 transition-all"
     >
       {/* ============================================================ */}
       {/* 1. シーン背景イラスト (Scene Environments) */}
@@ -358,36 +326,36 @@ export const CompanionSceneStage: React.FC<CompanionSceneStageProps> = ({
           type="button"
           id="btn-scene-hud-open-status"
           onClick={onOpenStatusDetail}
-          className="group flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/90 hover:bg-white active:scale-95 text-stone-800 border border-stone-300 shadow-sm backdrop-blur-md transition-all cursor-pointer"
+          className="group flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/90 dark:bg-stone-900/90 hover:bg-white dark:hover:bg-stone-850 active:scale-95 text-stone-800 dark:text-stone-100 border border-stone-300 dark:border-stone-700 shadow-sm backdrop-blur-md transition-all cursor-pointer"
           title="タップして詳細ステータス・認識ボードを表示"
         >
           {/* シーンラベル */}
-          <span className="text-xs font-bold text-stone-900 shrink-0">
+          <span className="text-xs font-bold text-stone-900 dark:text-stone-100 shrink-0">
             {sceneConfig.chipLabel}
           </span>
 
-          <span className="w-1 h-3 bg-stone-300 rounded-full" />
+          <span className="w-1 h-3 bg-stone-300 dark:bg-stone-700 rounded-full" />
 
           {/* 候補数 */}
-          <span className="text-[11px] font-semibold text-emerald-800 shrink-0 bg-emerald-50 px-1.5 py-0.2 rounded border border-emerald-200">
+          <span className="text-[11px] font-semibold text-emerald-800 dark:text-emerald-300 shrink-0 bg-emerald-50 dark:bg-emerald-950/80 px-1.5 py-0.2 rounded border border-emerald-200 dark:border-emerald-700/60">
             候補 {candidateCount}
           </span>
 
           {/* 未確定/進行度概要 */}
           {hasShoppingProgress ? (
-            <span className="text-[11px] text-teal-800 shrink-0 bg-teal-50 px-1.5 py-0.2 rounded border border-teal-200 font-mono">
+            <span className="text-[11px] text-teal-800 dark:text-teal-300 shrink-0 bg-teal-50 dark:bg-teal-950/80 px-1.5 py-0.2 rounded border border-teal-200 dark:border-teal-700/60 font-mono">
               進行 {statusSummary?.shoppingProgress?.collectedItems || 0}/
               {statusSummary?.shoppingProgress?.totalItems || 0}
             </span>
           ) : (
-            <span className="text-[11px] text-amber-900 shrink-0 bg-amber-50 px-1.5 py-0.2 rounded border border-amber-200 max-w-[80px] truncate">
+            <span className="text-[11px] text-amber-900 dark:text-amber-300 shrink-0 bg-amber-50 dark:bg-amber-950/80 px-1.5 py-0.2 rounded border border-amber-200 dark:border-amber-700/60 max-w-[80px] truncate">
               {undecidedPreview}
             </span>
           )}
 
           {/* 展開アイコン */}
-          <span className="w-5 h-5 rounded-full bg-stone-100 group-hover:bg-emerald-100 group-hover:text-emerald-800 flex items-center justify-center transition-colors">
-            <ChevronRight className="w-3 h-3 text-stone-500 group-hover:text-emerald-700" />
+          <span className="w-5 h-5 rounded-full bg-stone-100 dark:bg-stone-800 group-hover:bg-emerald-100 dark:group-hover:bg-emerald-900/60 flex items-center justify-center transition-colors">
+            <ChevronRight className="w-3 h-3 text-stone-500 dark:text-stone-400 group-hover:text-emerald-700 dark:group-hover:text-emerald-300" />
           </span>
         </button>
       </div>
@@ -396,7 +364,7 @@ export const CompanionSceneStage: React.FC<CompanionSceneStageProps> = ({
       {expertMeta && (
         <div
           id="scene-hud-expert-badge"
-          className="absolute top-3 left-3 z-20 flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-xs font-bold shadow-sm backdrop-blur-md animate-in fade-in slide-in-from-top-1 duration-200 bg-white/95 text-stone-800"
+          className="absolute top-3 left-3 z-20 flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-xs font-bold shadow-sm backdrop-blur-md animate-in fade-in slide-in-from-top-1 duration-200 bg-white/95 dark:bg-stone-900/95 text-stone-800 dark:text-stone-100 border-stone-200 dark:border-stone-700"
           title={expertMeta.title}
         >
           <span className={`p-1 rounded-full ${expertMeta.badgeStyle}`}>
@@ -411,10 +379,10 @@ export const CompanionSceneStage: React.FC<CompanionSceneStageProps> = ({
       {/* ============================================================ */}
       <div
         id="scene-character-container"
-        className="absolute bottom-2 sm:bottom-3 left-4 sm:left-8 z-10 flex items-end gap-3 pointer-events-auto"
+        className="absolute bottom-2 sm:bottom-3 left-4 sm:left-8 z-10 flex flex-col items-center pointer-events-auto"
       >
         {/* タヌキのポコ太 SVGキャラクター */}
-        <div className="relative w-32 h-44 sm:w-38 sm:h-52 drop-shadow-xl transition-transform hover:scale-[1.02]">
+        <div className="relative w-34 h-48 sm:w-42 sm:h-56 drop-shadow-xl transition-transform hover:scale-[1.02]">
           <svg
             viewBox="0 0 160 220"
             className="w-full h-full"
@@ -597,57 +565,23 @@ export const CompanionSceneStage: React.FC<CompanionSceneStageProps> = ({
           </svg>
         </div>
 
-        {/* ============================================================ */}
-        {/* キャラクターの発話吹き出し (Dialogue Bubble from Pokota) */}
-        {/* ============================================================ */}
-        <div className="flex-1 max-w-[240px] sm:max-w-sm mb-4 sm:mb-6 animate-in fade-in slide-in-from-left-2 duration-200">
-          <div className="relative bg-white/95 backdrop-blur-md rounded-2xl p-3 sm:p-3.5 border border-stone-200/90 shadow-md">
-            {/* 吹き出しの三角ヒゲ */}
-            <div className="absolute -left-2.5 bottom-4 w-0 h-0 border-t-8 border-t-transparent border-r-8 border-r-white border-b-8 border-b-transparent" />
-
-            {/* 発話ヘッダー（名前・状態） */}
-            <div className="flex items-center justify-between gap-1 mb-1">
-              <span className="text-[11px] font-extrabold text-stone-900 flex items-center gap-1">
-                <span>ポコ太</span>
-                <span className="text-[10px] font-normal text-stone-500">
-                  ({sceneConfig.characterRole})
-                </span>
-              </span>
-
-              {isTyping && (
-                <span className="flex items-center gap-1 text-[10px] text-emerald-700 font-bold animate-pulse">
-                  <Sparkles className="w-3 h-3" />
-                  考え中...
-                </span>
-              )}
-            </div>
-
-            {/* 発話内容 */}
-            <p className="text-xs sm:text-[13px] text-stone-800 leading-relaxed font-normal">
-              {displaySpeech}
-            </p>
-
-            {/* クイック相談プロンプト（タップしてすぐに質問できる） */}
-            {onQuickPrompt && (
-              <div className="mt-2 pt-2 border-t border-stone-100 flex flex-wrap gap-1">
-                {sceneConfig.quickPrompts.slice(0, 2).map((promptText, idx) => (
-                  <button
-                    key={idx}
-                    type="button"
-                    onClick={() => onQuickPrompt(promptText)}
-                    className="text-[10.5px] bg-stone-100 hover:bg-emerald-50 hover:text-emerald-800 hover:border-emerald-300 border border-stone-200 text-stone-700 px-2 py-0.5 rounded-full transition-colors cursor-pointer text-left truncate max-w-full"
-                  >
-                    💬 {promptText}
-                  </button>
-                ))}
-              </div>
-            )}
+        {/* 考え中エフェクト（キャラクターの上部に浮かぶ思考バッジ） */}
+        {isTyping && (
+          <div className="absolute -top-7 left-1/2 -translate-x-1/2 z-20 flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/95 dark:bg-stone-900/95 backdrop-blur-md shadow-md border border-emerald-300 dark:border-emerald-700 text-[11px] font-bold text-emerald-800 dark:text-emerald-300 animate-bounce whitespace-nowrap">
+            <Sparkles className="w-3 h-3 text-emerald-600 dark:text-emerald-400 animate-spin" />
+            <span>考え中...</span>
           </div>
+        )}
+
+        {/* ポコ太のネームプレート（世界の中にいるキャラクターの証） */}
+        <div className="mt-1 px-2.5 py-0.5 rounded-full bg-white/90 dark:bg-stone-900/90 backdrop-blur-xs border border-stone-200/90 dark:border-stone-700 shadow-2xs text-[11px] font-bold text-stone-800 dark:text-stone-100 flex items-center gap-1">
+          <span>ポコ太</span>
+          <span className="text-[9.5px] font-normal text-stone-500 dark:text-stone-400">({sceneConfig.characterRole})</span>
         </div>
       </div>
 
       {/* シーン下部の環境名バー（控えめな位置づけ） */}
-      <div className="absolute bottom-2 right-3 z-10 px-2 py-0.5 bg-black/40 backdrop-blur-xs text-white text-[10px] rounded-full font-medium">
+      <div className="absolute bottom-2 right-3 z-10 px-2.5 py-0.5 bg-black/45 backdrop-blur-xs text-white text-[10px] rounded-full font-medium shadow-2xs">
         📍 {sceneConfig.name}
       </div>
     </div>

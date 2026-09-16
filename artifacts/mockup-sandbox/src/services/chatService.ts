@@ -314,10 +314,14 @@ export class RenderBackendChatAdapter implements ChatService {
    * }
    */
   async deleteMemorySession(sessionId: string, connectionId?: string): Promise<{ success: boolean; error?: string }> {
-    const activeConnectionId = connectionId ?? this.memoryConnectionId;
+    const activeConnectionId = (connectionId ?? this.memoryConnectionId)?.trim();
+    if (!activeConnectionId || activeConnectionId === 'null' || activeConnectionId === 'undefined') {
+      // Memory未接続の場合は削除対象のGoogle Driveデータが存在しないため、成功として扱う
+      return { success: true };
+    }
     const deleteUrl = `${this.baseUrl}/memory/session/delete`;
     const payload = {
-      memory_connection_id: activeConnectionId || '',
+      memory_connection_id: activeConnectionId,
       session_id: sessionId,
     };
 

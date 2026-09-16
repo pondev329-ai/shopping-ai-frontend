@@ -21,6 +21,12 @@ import {
   Database,
   MessageSquare,
   BookOpen,
+  Menu,
+  Sun,
+  Moon,
+  Monitor,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
 import { ChatMessage, SuggestionOption } from '../types/chat';
 import { ShoppingSession } from '../types/session';
@@ -33,6 +39,7 @@ import {
   extractStatusSummary,
   INITIAL_GREETING_MESSAGE,
 } from '../services/sessionManager';
+import { useTheme } from '../hooks/useTheme';
 import { CompanionSceneStage } from './CompanionSceneStage';
 import { StatusDetailModal } from './StatusDetailModal';
 import { SessionDrawer } from './SessionDrawer';
@@ -65,11 +72,22 @@ export const ShoppingAIChat: React.FC<ShoppingAIChatProps> = ({
   const conversationRecord = activeSession.conversationRecord;
 
   // 3. UI表示制御
+  const { theme, setTheme } = useTheme();
   const [showSessionDrawer, setShowSessionDrawer] = useState(false);
   const [showConversationReview, setShowConversationReview] = useState(false);
   const [showMemoryRomModal, setShowMemoryRomModal] = useState(false);
   const [showStatusDetailModal, setShowStatusDetailModal] = useState(false);
+  const [showAppMenu, setShowAppMenu] = useState(false);
   const [isStatusExpanded, setIsStatusExpanded] = useState(false);
+  // 返信候補（クイックリプライ）の開閉状態（メッセージIDごとの展開フラグ）
+  const [expandedQuickReplies, setExpandedQuickReplies] = useState<Record<string, boolean>>({});
+
+  const toggleQuickReplies = (messageId: string) => {
+    setExpandedQuickReplies((prev) => ({
+      ...prev,
+      [messageId]: !prev[messageId],
+    }));
+  };
 
   // 4. 入力・通信ステート
   const [input, setInput] = useState('');
@@ -160,52 +178,37 @@ export const ShoppingAIChat: React.FC<ShoppingAIChatProps> = ({
     setInput('');
   };
 
-  // セッション削除（Google Drive Memory側のセッションROMデータ削除と連携）
+  // セッション削除（Google Drive Memory接続時はROMデータも連動削除、未接続時はFrontendのみ正常削除）
   const handleDeleteSession = async (sessionId: string): Promise<{ success: boolean; error?: string }> => {
-    // 1. 現在接続中のGoogle Drive connection IDを取得
-    const currentMemoryId =
+    // 1. 現在接続中の有効なGoogle Drive connection IDを確認
+    const rawMemoryId =
       memoryConnectionId ||
       (chatService.getMemoryConnectionId ? chatService.getMemoryConnectionId() : null);
+    const validMemoryConnectionId =
+      typeof rawMemoryId === 'string' &&
+      rawMemoryId.trim().length > 0 &&
+      rawMemoryId.trim() !== 'null' &&
+      rawMemoryId.trim() !== 'undefined'
+        ? rawMemoryId.trim()
+        : null;
 
-    // 2. Render側の /memory/session/delete API を呼び出す
-    // 送信データ:
-    // {
-    //   "memory_connection_id": "<現在接続中のGoogle Drive connection id>",
-    //   "session_id": "<削除対象のsession id>"
-    // }
     try {
-      if (chatService.deleteMemorySession) {
-        const res = await chatService.deleteMemorySession(sessionId, currentMemoryId || undefined);
-        if (!res.success) {
-          // API削除が失敗した場合は、Frontendのセッションを残す
-          return {
-            success: false,
-            error: res.error || 'Memory上のセッションデータ削除に失敗しました',
-          };
-        }
-      } else {
-        // 直接フォールバック
-        const deleteUrl = '/api/render-backend/memory/session/delete';
-        const response = await fetch(deleteUrl, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            memory_connection_id: currentMemoryId || '',
-            session_id: sessionId,
-          }),
-        });
-        if (!response.ok) {
-          const errText = await response.text().catch(() => `HTTP ${response.status}`);
-          return {
-            success: false,
-            error: `Memory上のセッション削除に失敗しました (${errText})`,
-          };
+      // 2. Memory接続中の場合のみ、Memory上のセッションデータ削除APIを呼び出す
+      // ※ Memory未接続は通常・正常な状態であるため、APIを呼び出さず、エラーも出さずにFrontendセッション削除を実行する
+      if (validMemoryConnectionId) {
+        if (chatService.deleteMemorySession) {
+          const res = await chatService.deleteMemorySession(sessionId, validMemoryConnectionId);
+          if (!res.success) {
+            // Memory側の削除に失敗した場合は、安全策としてFrontendのセッションを残す
+            return {
+              success: false,
+              error: res.error || 'Memory上のセッションデータ削除に失敗しました',
+            };
+          }
         }
       }
 
-      // 3. 成功した場合のみFrontendのセッション一覧から削除
+      // 3. Frontendのセッション一覧から削除
       const remaining = sessions.filter((s) => s.id !== sessionId);
       if (remaining.length === 0) {
         const fresh = createNewSession();
@@ -505,382 +508,300 @@ export const ShoppingAIChat: React.FC<ShoppingAIChatProps> = ({
   return (
     <div
       id="shopping-ai-root"
-      className="flex flex-col h-[100dvh] w-full max-w-4xl lg:max-w-5xl mx-auto bg-stone-100/60 text-stone-900 overflow-hidden font-sans border-x border-stone-200 shadow-sm"
+      className="flex flex-col h-[100dvh] w-full max-w-4xl lg:max-w-5xl mx-auto bg-stone-100/60 dark:bg-stone-950 text-stone-900 dark:text-stone-100 overflow-hidden font-sans border-x border-stone-200 dark:border-stone-800 shadow-sm transition-colors duration-150"
     >
-      {/* 1. Header (Mobile First & Scene/Session Bar) */}
+      {/* 1. 最小限のヘッダー */}
       <header
         id="chat-header"
-        className="px-3.5 sm:px-4 py-2 bg-white/95 backdrop-blur border-b border-stone-200 sticky top-0 z-10 shrink-0"
+        className="px-3.5 sm:px-4 py-2 bg-white/95 dark:bg-stone-900/95 backdrop-blur border-b border-stone-200 dark:border-stone-800 sticky top-0 z-20 shrink-0 transition-colors"
       >
         <div className="flex items-center justify-between">
+          {/* 左側：ロゴ & 常時確認できるMemory接続状態 */}
           <div className="flex items-center gap-2 min-w-0">
-            <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-emerald-600 text-white flex items-center justify-center font-bold text-xs sm:text-sm shadow-xs shrink-0">
-              <Sparkles className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+            <div className="w-7 h-7 rounded-full bg-emerald-600 text-white flex items-center justify-center font-bold text-xs shadow-2xs shrink-0">
+              <Sparkles className="w-3.5 h-3.5" />
             </div>
-            <div className="min-w-0">
-              <div className="flex items-center gap-1.5">
-                <h1 className="text-xs sm:text-sm font-bold text-stone-900 leading-tight">Shopping AI</h1>
-                {/* 現在のシーンバッジ */}
-                {activeSession.currentScene === 'shopping' && (
-                  <span className="inline-flex items-center gap-0.5 px-1.5 py-0.2 text-[10px] font-semibold rounded bg-emerald-100 text-emerald-800 border border-emerald-300">
-                    <ShoppingBag className="w-2.5 h-2.5" /> 買物中
-                  </span>
-                )}
-                {activeSession.currentScene === 'after_shopping' && (
-                  <span className="inline-flex items-center gap-0.5 px-1.5 py-0.2 text-[10px] font-semibold rounded bg-amber-100 text-amber-800 border border-amber-300">
-                    <Utensils className="w-2.5 h-2.5" /> 帰宅・調理
-                  </span>
-                )}
-                {(!activeSession.currentScene || activeSession.currentScene === 'planning') && (
-                  <span className="inline-flex items-center gap-0.5 px-1.5 py-0.2 text-[10px] font-semibold rounded bg-stone-100 text-stone-700 border border-stone-300">
-                    <BookOpen className="w-2.5 h-2.5" /> 献立計画
-                  </span>
-                )}
-              </div>
-              <p className="text-[10px] sm:text-[11px] text-stone-500 truncate">状況・可能性・進行状態ナビゲーション</p>
-            </div>
-          </div>
+            <span className="text-sm font-bold text-stone-900 dark:text-stone-100 leading-none">Shopping AI</span>
 
-          <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
-            {/* Google Drive Memory ボタン */}
-            {memoryConnectionId ? (
-              <button
-                type="button"
-                id="btn-memory-connected"
-                onClick={() => setShowMemoryModal(true)}
-                className="flex items-center gap-1 px-2 py-1 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-full text-[11px] font-medium hover:bg-emerald-100 transition-colors cursor-pointer active:scale-95"
-                title="Google Drive Memory 接続中"
-              >
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                <HardDrive className="w-3 h-3 text-emerald-700" />
-                <span className="hidden sm:inline">Memory</span>
-              </button>
-            ) : (
-              <button
-                type="button"
-                id="btn-memory-connect"
-                onClick={() => setShowMemoryModal(true)}
-                className="flex items-center gap-1 px-2 py-1 bg-stone-100 hover:bg-stone-200 text-stone-600 rounded-full text-[11px] font-medium transition-colors cursor-pointer active:scale-95"
-                title="Google Drive Memory を接続"
-              >
-                <HardDrive className="w-3 h-3 text-stone-500" />
-                <span className="hidden sm:inline">Memory</span>
-              </button>
-            )}
-
-            {/* 記憶（ROM一覧）ボタン */}
+            {/* Memory常時ステータス表示（未接続はエラー扱いせず、タップで接続設定） */}
             <button
               type="button"
-              id="btn-open-memory-rom"
-              onClick={() => setShowMemoryRomModal(true)}
-              className="flex items-center gap-1 px-2 sm:px-2.5 py-1 bg-stone-100 hover:bg-stone-200 text-stone-700 rounded-full text-[11px] font-medium transition-colors cursor-pointer active:scale-95"
-              title="Google Drive 記憶（ROM）管理"
-              aria-label="Google Drive 記憶管理"
-            >
-              <Database className="w-3.5 h-3.5 text-stone-600" />
-              <span>記憶</span>
-            </button>
-
-            {/* 対話ログ全体（Conversation Review） */}
-            <button
-              type="button"
-              id="btn-open-conversation-history"
-              onClick={() => setShowConversationReview(true)}
-              className="flex items-center gap-1 px-2 sm:px-2.5 py-1 bg-stone-100 hover:bg-stone-200 text-stone-700 rounded-full text-[11px] font-medium transition-colors cursor-pointer active:scale-95"
-              title="対話履歴を全件確認"
-              aria-label="対話履歴全件確認"
-            >
-              <History className="w-3.5 h-3.5 text-stone-600" />
-              <span className="hidden sm:inline">対話記録</span>
-            </button>
-
-            {/* セッション一覧・切り替えボタン */}
-            <button
-              type="button"
-              id="btn-open-session-drawer"
-              onClick={() => setShowSessionDrawer(true)}
-              className="flex items-center gap-1.5 px-2 sm:px-2.5 py-1 bg-stone-100 hover:bg-emerald-50 hover:text-emerald-800 hover:border-emerald-200 border border-stone-200 text-stone-700 rounded-full text-xs font-medium transition-colors cursor-pointer active:scale-95"
-              title="セッション一覧・切り替え"
-              aria-label="セッション一覧・切り替え"
-            >
-              <Layers className="w-3.5 h-3.5 text-stone-600" />
-              <span>セッション ({sessions.length})</span>
-            </button>
-          </div>
-        </div>
-
-        {/* 2. 現在のセッション表示バー (Current Session Indicator) */}
-        <div
-          id="current-session-bar"
-          className="mt-1.5 pt-1.5 border-t border-stone-100 flex items-center justify-between gap-2"
-        >
-          <button
-            type="button"
-            id="btn-current-session-title"
-            onClick={() => setShowSessionDrawer(true)}
-            className="flex items-center gap-1.5 min-w-0 text-left hover:opacity-80 transition-opacity cursor-pointer group"
-          >
-            <span
-              className={`w-2 h-2 rounded-full shrink-0 ${
-                activeSession.status === 'in_progress' ? 'bg-emerald-500 animate-pulse' : 'bg-stone-400'
+              id="btn-header-memory-status"
+              onClick={() => setShowMemoryModal(true)}
+              className={`flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-medium transition-colors cursor-pointer border ${
+                memoryConnectionId
+                  ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800 hover:bg-emerald-100 dark:hover:bg-emerald-900/80'
+                  : 'bg-stone-100 dark:bg-stone-800 text-stone-600 dark:text-stone-300 border-stone-200 dark:border-stone-700 hover:bg-stone-200 dark:hover:bg-stone-700'
               }`}
-            />
-            <span className="text-xs font-semibold text-stone-800 truncate max-w-[200px] sm:max-w-md group-hover:text-emerald-700">
-              {activeSession.title}
-            </span>
-            <span className="text-[10px] text-stone-400 font-mono shrink-0">{activeSession.date}</span>
-          </button>
+              title={
+                memoryConnectionId
+                  ? 'Google Drive Memory 接続中（タップして設定）'
+                  : 'Google Drive Memory 未接続（タップして接続）'
+              }
+            >
+              <span
+                className={`w-1.5 h-1.5 rounded-full shrink-0 ${
+                  memoryConnectionId ? 'bg-emerald-500 animate-pulse' : 'bg-stone-400 dark:bg-stone-500'
+                }`}
+              />
+              <HardDrive className="w-3 h-3 shrink-0 text-stone-600 dark:text-stone-300" />
+              <span className="text-[10.5px]">
+                {memoryConnectionId ? 'Drive 接続中' : 'Drive 未接続'}
+              </span>
+            </button>
+          </div>
 
+          {/* 右側：対話履歴 ＆ 新規セッション ＆ メニューボタン */}
           <div className="flex items-center gap-1.5 shrink-0">
-            <span
-              className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
-                activeSession.status === 'in_progress'
-                  ? 'bg-emerald-100 text-emerald-800'
-                  : 'bg-stone-200 text-stone-700'
-              }`}
+            <button
+              type="button"
+              id="btn-header-conversation-history"
+              onClick={() => setShowConversationReview(true)}
+              className="flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-stone-600 dark:text-stone-300 hover:text-stone-900 dark:hover:text-stone-100 hover:bg-stone-100 dark:hover:bg-stone-800 active:bg-stone-200 dark:active:bg-stone-700 rounded-full transition-colors cursor-pointer border border-stone-200 dark:border-stone-700 shadow-2xs"
+              title="対話履歴を全件確認"
             >
-              {activeSession.status === 'in_progress' ? '進行中' : '完了'}
-            </span>
+              <History className="w-3.5 h-3.5 text-stone-500 dark:text-stone-400" />
+              <span>会話履歴</span>
+              {conversationRecord.length > 0 && (
+                <span className="text-[10px] text-stone-400 dark:text-stone-500 font-mono">
+                  ({conversationRecord.length})
+                </span>
+              )}
+            </button>
 
             <button
               type="button"
-              id="btn-quick-new-session"
+              id="btn-header-new-session"
               onClick={() => handleCreateSession()}
-              className="p-1 text-stone-400 hover:text-emerald-700 hover:bg-emerald-50 rounded-full transition-colors cursor-pointer"
+              className="flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-emerald-700 dark:text-emerald-400 hover:text-emerald-800 dark:hover:text-emerald-300 hover:bg-emerald-50 dark:hover:bg-emerald-950/60 active:bg-emerald-100 dark:active:bg-emerald-900 rounded-full transition-colors cursor-pointer border border-emerald-200 dark:border-emerald-800 shadow-2xs"
               title="新しいセッションを開始"
             >
               <Plus className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">新規</span>
+            </button>
+
+            <button
+              type="button"
+              id="btn-header-app-menu"
+              onClick={() => setShowAppMenu(true)}
+              className="p-1.5 text-stone-600 hover:text-stone-900 dark:text-stone-300 dark:hover:text-stone-100 hover:bg-stone-100 dark:hover:bg-stone-800 active:bg-stone-200 dark:active:bg-stone-700 rounded-full transition-colors cursor-pointer border border-stone-200 dark:border-stone-700 shadow-2xs"
+              title="メニューを開く（セッション・記憶・対話記録・テーマ設定など）"
+              aria-label="メニューを開く"
+            >
+              <Menu className="w-4 h-4" />
             </button>
           </div>
         </div>
       </header>
 
-      {/* 3. メイン画面の主役：現在のシーン＋キャラクター（画面上部を大胆に占有） */}
+      {/* 2. メイン画面の主役：現在のシーン＋キャラクター（画面上部の世界領域） */}
       <section
         id="stage-scene-main"
         aria-label="現在のシーンとキャラクター"
-        className="shrink-0 p-2 sm:p-3 bg-stone-100 border-b border-stone-200"
+        className="shrink-0 p-2 sm:p-3 bg-stone-100/90 dark:bg-stone-900/90 border-b border-stone-200 dark:border-stone-800 transition-colors"
       >
         <CompanionSceneStage
           scene={activeSession.currentScene || 'planning'}
           expertMode={activeSession.expertMode}
           statusSummary={activeSession.statusSummary}
-          latestAssistantMessage={latestAssistantMsg?.content}
           isTyping={isTyping}
           onOpenStatusDetail={() => setShowStatusDetailModal(true)}
-          onQuickPrompt={(txt) => handleSend(txt)}
         />
       </section>
 
-      {/* 4. 画面下部（全体の約1/3）：チャット・対話領域 */}
+      {/* 3. Shopping AIの返信 & 対話領域 */}
       <section
         id="stage-lower-dialogue"
-        aria-label="アシスタントとの対話領域"
-        className="flex-1 flex flex-col min-h-0 bg-white"
+        aria-label="Shopping AIの返信と対話"
+        className="flex-1 flex flex-col min-h-0 bg-white dark:bg-stone-900 transition-colors"
       >
-        {/* 対話領域ヘッダー */}
-        <div className="px-3.5 py-1.5 border-b border-stone-100 flex items-center justify-between bg-stone-50/70 shrink-0">
-          <div className="flex items-center gap-1.5 text-xs font-semibold text-stone-700">
-            <MessageSquare className="w-3.5 h-3.5 text-emerald-600" />
-            <span>現在のやり取り</span>
-          </div>
-
-          <button
-            type="button"
-            id="btn-view-conversation-record-top"
-            onClick={() => setShowConversationReview(true)}
-            className="flex items-center gap-1 text-[11px] text-stone-500 hover:text-stone-800 font-medium px-2 py-0.5 rounded-md hover:bg-stone-200/60 transition-colors cursor-pointer"
-            title="過去のやり取りを全件確認"
-          >
-            <History className="w-3.5 h-3.5 text-stone-500" />
-            <span>対話履歴 ({conversationRecord.length}件)</span>
-          </button>
-        </div>
-
         {/* チャットメッセージ表示部 */}
         <main
           id="chat-messages-container"
-          className="flex-1 overflow-y-auto p-3 sm:p-4 space-y-3 overscroll-contain bg-stone-50/40"
+          className="flex-1 overflow-y-auto p-2 sm:p-4 space-y-3 overscroll-contain bg-stone-50/40 dark:bg-stone-950/40 transition-colors"
         >
-          {/* 会話を振り返る導線（過去ログがある場合） */}
-          {pastMessageCount > 0 && (
-            <div className="flex justify-center my-1">
-              <button
-                type="button"
-                id="btn-review-past-conversations"
-                onClick={() => setShowConversationReview(true)}
-                className="inline-flex items-center gap-1.5 px-3 py-1 bg-white hover:bg-stone-100 active:bg-stone-200 border border-stone-200 text-stone-600 rounded-full text-xs font-medium transition-colors shadow-2xs cursor-pointer active:scale-95"
-              >
-                <History className="w-3.5 h-3.5 text-stone-500" />
-                <span>これまでの会話履歴（過去 {pastMessageCount} 件）を見る</span>
-              </button>
-            </div>
-          )}
-
-        {/* 振り返り用ボタン（全ログを見たい時用、常にアクセス可能） */}
-        {pastMessageCount === 0 && conversationRecord.length > 1 && (
-          <div className="flex justify-end">
-            <button
-              type="button"
-              id="btn-view-conversation-record-top"
-              onClick={() => setShowConversationReview(true)}
-              className="text-[11px] text-stone-400 hover:text-stone-700 flex items-center gap-1 transition-colors cursor-pointer py-0.5 px-1"
-            >
-              <History className="w-3 h-3" />
-              <span>対話記録を確認</span>
-            </button>
-          </div>
-        )}
-
-        {/* 直近の対話メッセージ表示 */}
-        {recentDisplayMessages.map((msg) => (
-          <div
-            key={msg.id}
-            id={`message-row-${msg.id}`}
-            className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'}`}
-          >
-            {/* Balloon */}
+          {/* 直近の対話メッセージ表示 */}
+          {recentDisplayMessages.map((msg) => (
             <div
-              className={`relative max-w-[90%] rounded-2xl px-4 py-3 text-[14.5px] leading-relaxed break-words whitespace-pre-wrap ${
-                msg.role === 'user'
-                  ? 'bg-emerald-600 text-white rounded-tr-xs shadow-xs font-normal'
-                  : 'bg-white text-stone-800 border border-stone-200 rounded-tl-xs shadow-2xs group'
-              }`}
+              key={msg.id}
+              id={`message-row-${msg.id}`}
+              className={`flex flex-col w-full ${msg.role === 'user' ? 'items-end' : 'items-start'}`}
             >
+              {/* アシスタント発話ヘッダー（世界領域から分離された会話としての存在） */}
               {msg.role === 'assistant' && (
-                <button
-                  type="button"
-                  id={`btn-balloon-copy-${msg.id}`}
-                  onClick={() => handleCopyMessage(msg.id, msg.content)}
-                  className="absolute top-2 right-2 p-1.5 rounded-lg bg-stone-50 hover:bg-emerald-50 text-stone-400 hover:text-emerald-700 border border-stone-200 transition-colors cursor-pointer shadow-2xs"
-                  title="ワンタップで返信をコピー"
-                  aria-label="返信をコピー"
-                >
-                  {copiedMessageId === msg.id ? (
-                    <Check className="w-3.5 h-3.5 text-emerald-600" />
-                  ) : (
-                    <Copy className="w-3.5 h-3.5" />
-                  )}
-                </button>
-              )}
-              {msg.imageUrl && (
-                <div className="mb-2.5 overflow-hidden rounded-xl bg-black/15">
-                  <img
-                    src={msg.imageUrl}
-                    alt="相談写真"
-                    className="w-full max-h-60 object-cover rounded-xl cursor-pointer hover:opacity-90 active:scale-[0.99] transition-all"
-                    onClick={() => setPreviewModalImage(msg.imageUrl || null)}
-                  />
-                  <div className="flex items-center justify-end px-1.5 py-1 text-[11px] opacity-85 gap-1">
-                    <ZoomIn className="w-3 h-3" />
-                    <span>タップして拡大</span>
+                <div className="flex items-center gap-1.5 mb-1 pl-1">
+                  <div className="w-5 h-5 rounded-full bg-emerald-600 text-white flex items-center justify-center text-[10px] font-bold shadow-2xs shrink-0">
+                    ポ
                   </div>
+                  <span className="text-xs font-bold text-stone-800 dark:text-stone-200">
+                    Shopping AI（ポコ太）
+                  </span>
+                  {activeSession.expertMode && (
+                    <span className="text-[10px] bg-purple-100 dark:bg-purple-950/80 text-purple-800 dark:text-purple-300 px-1.5 py-0.2 rounded font-semibold border border-purple-200 dark:border-purple-800">
+                      {activeSession.expertMode}専門
+                    </span>
+                  )}
                 </div>
               )}
-              {msg.content}
-            </div>
 
-            {/* Inline Decision Support (AI側のみ) */}
-            {msg.role === 'assistant' && msg.decisionData && (
-              <div className="w-full max-w-[95%] mt-2.5 space-y-2.5">
-                {/* 状況整理タグ (Context Understanding) */}
-                {msg.decisionData.contextSummary && (
-                  <div className="bg-stone-100/90 rounded-xl p-2.5 border border-stone-200 text-xs text-stone-600 space-y-1">
-                    <div className="font-medium text-stone-700 flex items-center gap-1.5 mb-1">
-                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                      理解した条件:
-                    </div>
-                    <div className="flex flex-wrap gap-1.5 pt-0.5">
-                      {msg.decisionData.contextSummary.timeLimit && (
-                        <span className="inline-flex items-center gap-1 bg-white px-2 py-0.5 rounded-md border border-stone-200 font-medium text-stone-700 text-[11px]">
-                          <Clock className="w-3 h-3 text-stone-500" />
-                          {msg.decisionData.contextSummary.timeLimit}
-                        </span>
-                      )}
-                      {msg.decisionData.contextSummary.availableIngredients?.map((ing, idx) => (
-                        <span
-                          key={idx}
-                          className="inline-flex items-center gap-1 bg-white px-2 py-0.5 rounded-md border border-stone-200 font-medium text-stone-700 text-[11px]"
-                        >
-                          <Utensils className="w-3 h-3 text-stone-500" />
-                          {ing}
-                        </span>
-                      ))}
-                      {msg.decisionData.contextSummary.moodOrPreference && (
-                        <span className="inline-flex items-center gap-1 bg-white px-2 py-0.5 rounded-md border border-stone-200 font-medium text-stone-700 text-[11px]">
-                          {msg.decisionData.contextSummary.moodOrPreference}
-                        </span>
-                      )}
+              {/* Balloon: スマホでは横幅いっぱいにフィット (w-full max-w-full) */}
+              <div
+                className={`relative w-full sm:max-w-[92%] rounded-2xl px-3.5 sm:px-4 py-3 text-[14.5px] leading-relaxed break-words whitespace-pre-wrap transition-colors ${
+                  msg.role === 'user'
+                    ? 'bg-emerald-600 text-white rounded-tr-xs shadow-xs font-normal'
+                    : 'bg-white dark:bg-stone-800 text-stone-800 dark:text-stone-100 border border-stone-200 dark:border-stone-700 rounded-tl-xs shadow-2xs group'
+                }`}
+              >
+                {msg.role === 'assistant' && (
+                  <button
+                    type="button"
+                    id={`btn-balloon-copy-${msg.id}`}
+                    onClick={() => handleCopyMessage(msg.id, msg.content)}
+                    className="absolute top-2 right-2 p-1.5 rounded-lg bg-stone-50 dark:bg-stone-700/80 hover:bg-emerald-50 dark:hover:bg-emerald-950/80 text-stone-400 dark:text-stone-300 hover:text-emerald-700 dark:hover:text-emerald-300 border border-stone-200 dark:border-stone-600 transition-colors cursor-pointer shadow-2xs"
+                    title="ワンタップで返信をコピー"
+                    aria-label="返信をコピー"
+                  >
+                    {copiedMessageId === msg.id ? (
+                      <Check className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                    ) : (
+                      <Copy className="w-3.5 h-3.5" />
+                    )}
+                  </button>
+                )}
+                {msg.imageUrl && (
+                  <div className="mb-2.5 overflow-hidden rounded-xl bg-black/15">
+                    <img
+                      src={msg.imageUrl}
+                      alt="相談写真"
+                      className="w-full max-h-60 object-cover rounded-xl cursor-pointer hover:opacity-90 active:scale-[0.99] transition-all"
+                      onClick={() => setPreviewModalImage(msg.imageUrl || null)}
+                    />
+                    <div className="flex items-center justify-end px-1.5 py-1 text-[11px] opacity-85 gap-1 text-white">
+                      <ZoomIn className="w-3 h-3" />
+                      <span>タップして拡大</span>
                     </div>
                   </div>
                 )}
-
-                {/* 選択肢カード (ユーザーが選べる可能性の提示) */}
-                {msg.decisionData.options && msg.decisionData.options.length > 0 && (
-                  <div className="space-y-1.5">
-                    <p className="text-[11px] font-semibold text-stone-500 px-1">
-                      現在の候補・選択肢（タップして深掘り）:
-                    </p>
-                    <div className="grid grid-cols-1 gap-1.5">
-                      {msg.decisionData.options.map((opt) => (
-                        <button
-                          key={opt.id}
-                          id={`btn-option-${opt.id}`}
-                          onClick={() => handleOptionSelect(opt)}
-                          className="w-full text-left bg-white hover:bg-stone-50 active:bg-stone-100 border border-stone-200 hover:border-emerald-500 rounded-xl p-3 transition-all shadow-2xs group cursor-pointer"
-                        >
-                          <div className="flex items-start justify-between gap-2">
-                            <h2 className="font-semibold text-stone-900 text-xs group-hover:text-emerald-700 transition-colors">
-                              {opt.title}
-                            </h2>
-                            <ChevronRight className="w-3.5 h-3.5 text-stone-400 group-hover:text-emerald-600 transition-colors shrink-0 mt-0.5" />
-                          </div>
-                          {opt.summary && (
-                            <p className="text-xs text-stone-600 mt-0.5 leading-relaxed">{opt.summary}</p>
-                          )}
-
-                          <div className="flex flex-wrap items-center gap-2 mt-2 pt-1.5 border-t border-stone-100 text-[11px] text-stone-500">
-                            {opt.prepTimeMinutes && (
-                              <span className="inline-flex items-center gap-1">
-                                <Clock className="w-3 h-3 text-stone-400" />
-                                約{opt.prepTimeMinutes}分
-                              </span>
-                            )}
-                            <span className="inline-flex items-center gap-1">
-                              <ShoppingBag className="w-3 h-3 text-stone-400" />
-                              {opt.requiresShopping ? '買い足しあり' : '手持ちでOK'}
-                            </span>
-                          </div>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* クイックリプライボタン */}
-                {msg.decisionData.quickReplies && msg.decisionData.quickReplies.length > 0 && (
-                  <div className="pt-0.5">
-                    <p className="text-[11px] text-stone-500 mb-1 px-0.5">すぐに返信する:</p>
-                    <div className="flex flex-wrap gap-1.5">
-                      {msg.decisionData.quickReplies.map((reply, i) => (
-                        <button
-                          key={i}
-                          id={`btn-quick-reply-${i}`}
-                          onClick={() => handleSend(reply)}
-                          className="text-xs bg-white active:bg-stone-100 text-stone-700 border border-stone-300 hover:border-emerald-600 hover:text-emerald-700 px-3 py-1.5 rounded-full transition-colors shadow-2xs cursor-pointer font-normal"
-                        >
-                          {reply}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
+                {msg.content}
               </div>
-            )}
+
+              {/* Inline Decision Support (AI側のみ) */}
+              {msg.role === 'assistant' && msg.decisionData && (
+                <div className="w-full sm:max-w-[92%] mt-2.5 space-y-2.5">
+                  {/* 状況整理タグ (Context Understanding) */}
+                  {msg.decisionData.contextSummary && (
+                    <div className="bg-stone-100/90 dark:bg-stone-800/90 rounded-xl p-2.5 border border-stone-200 dark:border-stone-700 text-xs text-stone-600 dark:text-stone-300 space-y-1">
+                      <div className="font-medium text-stone-700 dark:text-stone-200 flex items-center gap-1.5 mb-1">
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                        理解した条件:
+                      </div>
+                      <div className="flex flex-wrap gap-1.5 pt-0.5">
+                        {msg.decisionData.contextSummary.timeLimit && (
+                          <span className="inline-flex items-center gap-1 bg-white dark:bg-stone-900 px-2 py-0.5 rounded-md border border-stone-200 dark:border-stone-700 font-medium text-stone-700 dark:text-stone-200 text-[11px]">
+                            <Clock className="w-3 h-3 text-stone-500 dark:text-stone-400" />
+                            {msg.decisionData.contextSummary.timeLimit}
+                          </span>
+                        )}
+                        {msg.decisionData.contextSummary.availableIngredients?.map((ing, idx) => (
+                          <span
+                            key={idx}
+                            className="inline-flex items-center gap-1 bg-white dark:bg-stone-900 px-2 py-0.5 rounded-md border border-stone-200 dark:border-stone-700 font-medium text-stone-700 dark:text-stone-200 text-[11px]"
+                          >
+                            <Utensils className="w-3 h-3 text-stone-500 dark:text-stone-400" />
+                            {ing}
+                          </span>
+                        ))}
+                        {msg.decisionData.contextSummary.moodOrPreference && (
+                          <span className="inline-flex items-center gap-1 bg-white dark:bg-stone-900 px-2 py-0.5 rounded-md border border-stone-200 dark:border-stone-700 font-medium text-stone-700 dark:text-stone-200 text-[11px]">
+                            {msg.decisionData.contextSummary.moodOrPreference}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* 選択肢カード (ユーザーが選べる可能性の提示) */}
+                  {msg.decisionData.options && msg.decisionData.options.length > 0 && (
+                    <div className="space-y-1.5">
+                      <p className="text-[11px] font-semibold text-stone-500 dark:text-stone-400 px-1">
+                        現在の候補・選択肢（タップして深掘り）:
+                      </p>
+                      <div className="grid grid-cols-1 gap-1.5">
+                        {msg.decisionData.options.map((opt) => (
+                          <button
+                            key={opt.id}
+                            id={`btn-option-${opt.id}`}
+                            onClick={() => handleOptionSelect(opt)}
+                            className="w-full text-left bg-white dark:bg-stone-800 hover:bg-stone-50 dark:hover:bg-stone-750 active:bg-stone-100 dark:active:bg-stone-700 border border-stone-200 dark:border-stone-700 hover:border-emerald-500 dark:hover:border-emerald-500 rounded-xl p-3 transition-all shadow-2xs group cursor-pointer"
+                          >
+                            <div className="flex items-start justify-between gap-2">
+                              <h2 className="font-semibold text-stone-900 dark:text-stone-100 text-xs group-hover:text-emerald-700 dark:group-hover:text-emerald-400 transition-colors">
+                                {opt.title}
+                              </h2>
+                              <ChevronRight className="w-3.5 h-3.5 text-stone-400 dark:text-stone-500 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors shrink-0 mt-0.5" />
+                            </div>
+                            {opt.summary && (
+                              <p className="text-xs text-stone-600 dark:text-stone-300 mt-0.5 leading-relaxed">{opt.summary}</p>
+                            )}
+
+                            <div className="flex flex-wrap items-center gap-2 mt-2 pt-1.5 border-t border-stone-100 dark:border-stone-700/60 text-[11px] text-stone-500 dark:text-stone-400">
+                              {opt.prepTimeMinutes && (
+                                <span className="inline-flex items-center gap-1">
+                                  <Clock className="w-3 h-3 text-stone-400 dark:text-stone-500" />
+                                  約{opt.prepTimeMinutes}分
+                                </span>
+                              )}
+                              <span className="inline-flex items-center gap-1">
+                                <ShoppingBag className="w-3 h-3 text-stone-400 dark:text-stone-500" />
+                                {opt.requiresShopping ? '買い足しあり' : '手持ちでOK'}
+                              </span>
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* クイックリプライボタン（常時表示せず、開くボタンで必要なときだけ表示） */}
+                  {msg.decisionData.quickReplies && msg.decisionData.quickReplies.length > 0 && (
+                    <div className="pt-0.5">
+                      <button
+                        type="button"
+                        id={`btn-toggle-quick-replies-${msg.id}`}
+                        onClick={() => toggleQuickReplies(msg.id)}
+                        className="inline-flex items-center gap-1 text-[11px] font-medium text-stone-500 hover:text-emerald-700 dark:text-stone-400 dark:hover:text-emerald-400 bg-stone-100/90 dark:bg-stone-800/90 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 border border-stone-200 dark:border-stone-700 rounded-full px-2.5 py-1 transition-all cursor-pointer shadow-2xs"
+                      >
+                        <Sparkles className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
+                        <span>返信の候補 ({msg.decisionData.quickReplies.length}件)</span>
+                        {expandedQuickReplies[msg.id] ? (
+                          <ChevronUp className="w-3 h-3 ml-0.5 text-stone-400" />
+                        ) : (
+                          <ChevronDown className="w-3 h-3 ml-0.5 text-stone-400" />
+                        )}
+                      </button>
+
+                      {expandedQuickReplies[msg.id] && (
+                        <div className="mt-2 pl-0.5 flex flex-wrap gap-1.5 animate-in fade-in slide-in-from-top-1 duration-150">
+                          {msg.decisionData.quickReplies.map((reply, i) => (
+                            <button
+                              key={i}
+                              id={`btn-quick-reply-${i}`}
+                              onClick={() => handleSend(reply)}
+                              className="text-xs bg-white dark:bg-stone-800 active:bg-stone-100 dark:active:bg-stone-700 text-stone-700 dark:text-stone-200 border border-stone-300 dark:border-stone-600 hover:border-emerald-600 dark:hover:border-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300 px-3 py-1.5 rounded-full transition-colors shadow-2xs cursor-pointer font-normal"
+                            >
+                              {reply}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
 
             {/* メッセージフッター（時刻 & ワンタップコピーボタン） */}
             <div
-              className={`flex items-center gap-2 mt-1.5 px-1 text-[11px] text-stone-400 ${
+              className={`flex items-center gap-2 mt-1.5 px-1 text-[11px] text-stone-400 dark:text-stone-500 ${
                 msg.role === 'user' ? 'justify-end' : 'justify-start'
               }`}
             >
@@ -890,26 +811,26 @@ export const ShoppingAIChat: React.FC<ShoppingAIChatProps> = ({
                 onClick={() => handleCopyMessage(msg.id, msg.content)}
                 className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full transition-all cursor-pointer active:scale-95 border text-xs shadow-2xs ${
                   copiedMessageId === msg.id
-                    ? 'bg-emerald-50 text-emerald-700 border-emerald-300 font-medium'
-                    : 'bg-white text-stone-600 hover:text-stone-900 hover:bg-stone-100 border-stone-200'
+                    ? 'bg-emerald-50 dark:bg-emerald-950/80 text-emerald-700 dark:text-emerald-300 border-emerald-300 dark:border-emerald-700 font-medium'
+                    : 'bg-white dark:bg-stone-800 text-stone-600 dark:text-stone-300 hover:text-stone-900 dark:hover:text-stone-100 hover:bg-stone-100 dark:hover:bg-stone-700 border-stone-200 dark:border-stone-700'
                 }`}
                 title="メッセージ内容をワンタップでコピー"
                 aria-label="返信内容をコピー"
               >
                 {copiedMessageId === msg.id ? (
                   <>
-                    <Check className="w-3.5 h-3.5 text-emerald-600" />
+                    <Check className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
                     <span className="text-[10.5px]">コピー完了</span>
                   </>
                 ) : (
                   <>
-                    <Copy className="w-3.5 h-3.5 text-stone-400" />
+                    <Copy className="w-3.5 h-3.5 text-stone-400 dark:text-stone-500" />
                     <span className="text-[10.5px]">コピー</span>
                   </>
                 )}
               </button>
 
-              <span className="text-[10px] text-stone-400 font-mono">
+              <span className="text-[10px] text-stone-400 dark:text-stone-500 font-mono">
                 {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
               </span>
             </div>
@@ -918,11 +839,11 @@ export const ShoppingAIChat: React.FC<ShoppingAIChatProps> = ({
 
         {/* AI Typing Indicator */}
         {isTyping && (
-          <div className="flex items-center gap-1.5 bg-white border border-stone-200 rounded-2xl rounded-tl-xs px-4 py-2.5 w-fit text-stone-400 text-xs shadow-2xs">
-            <span className="w-1.5 h-1.5 rounded-full bg-stone-400 animate-bounce" style={{ animationDelay: '0ms' }} />
-            <span className="w-1.5 h-1.5 rounded-full bg-stone-400 animate-bounce" style={{ animationDelay: '150ms' }} />
-            <span className="w-1.5 h-1.5 rounded-full bg-stone-400 animate-bounce" style={{ animationDelay: '300ms' }} />
-            <span className="ml-1 text-stone-500">アシスタントが考え中...</span>
+          <div className="flex items-center gap-1.5 bg-white dark:bg-stone-800 border border-stone-200 dark:border-stone-700 rounded-2xl rounded-tl-xs px-4 py-2.5 w-fit text-stone-400 dark:text-stone-400 text-xs shadow-2xs">
+            <span className="w-1.5 h-1.5 rounded-full bg-stone-400 dark:bg-stone-500 animate-bounce" style={{ animationDelay: '0ms' }} />
+            <span className="w-1.5 h-1.5 rounded-full bg-stone-400 dark:bg-stone-500 animate-bounce" style={{ animationDelay: '150ms' }} />
+            <span className="w-1.5 h-1.5 rounded-full bg-stone-400 dark:bg-stone-500 animate-bounce" style={{ animationDelay: '300ms' }} />
+            <span className="ml-1 text-stone-500 dark:text-stone-400">アシスタントが考え中...</span>
           </div>
         )}
 
@@ -930,7 +851,7 @@ export const ShoppingAIChat: React.FC<ShoppingAIChatProps> = ({
       </main>
 
       {/* 5. Input Form (Mobile Optimized) */}
-      <footer id="chat-input-footer" className="p-3 bg-white border-t border-stone-200 shrink-0">
+      <footer id="chat-input-footer" className="p-3 bg-white dark:bg-stone-900 border-t border-stone-200 dark:border-stone-800 shrink-0 transition-colors">
         {/* 隠し input 要素（カメラ撮影用 & アルバム選択用） */}
         <input
           ref={cameraInputRef}
@@ -952,20 +873,20 @@ export const ShoppingAIChat: React.FC<ShoppingAIChatProps> = ({
 
         {/* 写真最適化中ローダー */}
         {isProcessingPhoto && (
-          <div className="mb-2 p-2 bg-stone-100 border border-stone-200 rounded-xl flex items-center gap-2 text-xs text-stone-600 animate-in fade-in duration-100">
-            <Loader2 className="w-4 h-4 animate-spin text-emerald-600 shrink-0" />
+          <div className="mb-2 p-2 bg-stone-100 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 rounded-xl flex items-center gap-2 text-xs text-stone-600 dark:text-stone-300 animate-in fade-in duration-100">
+            <Loader2 className="w-4 h-4 animate-spin text-emerald-600 dark:text-emerald-400 shrink-0" />
             <span>写真を準備中...</span>
           </div>
         )}
 
         {/* 写真エラー表示 */}
         {photoError && (
-          <div className="mb-2 p-2 bg-rose-50 border border-rose-200 rounded-xl flex items-center justify-between gap-2 text-xs text-rose-700 animate-in fade-in duration-100">
+          <div className="mb-2 p-2 bg-rose-50 dark:bg-rose-950/70 border border-rose-200 dark:border-rose-800 rounded-xl flex items-center justify-between gap-2 text-xs text-rose-700 dark:text-rose-300 animate-in fade-in duration-100">
             <span>{photoError}</span>
             <button
               type="button"
               onClick={() => setPhotoError(null)}
-              className="p-1 text-rose-500 hover:text-rose-800 rounded-full cursor-pointer"
+              className="p-1 text-rose-500 hover:text-rose-800 dark:text-rose-400 dark:hover:text-rose-200 rounded-full cursor-pointer"
             >
               <X className="w-3.5 h-3.5" />
             </button>
@@ -974,8 +895,8 @@ export const ShoppingAIChat: React.FC<ShoppingAIChatProps> = ({
 
         {/* 選択中写真プレビューバナー */}
         {selectedImage && (
-          <div className="mb-2.5 p-2 bg-emerald-50/90 border border-emerald-200 rounded-2xl flex items-center gap-3 animate-in fade-in slide-in-from-bottom-2 duration-150">
-            <div className="relative shrink-0 w-12 h-12 rounded-xl overflow-hidden border border-emerald-300 shadow-2xs bg-stone-100">
+          <div className="mb-2.5 p-2 bg-emerald-50/90 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 rounded-2xl flex items-center gap-3 animate-in fade-in slide-in-from-bottom-2 duration-150">
+            <div className="relative shrink-0 w-12 h-12 rounded-xl overflow-hidden border border-emerald-300 dark:border-emerald-700 shadow-2xs bg-stone-100 dark:bg-stone-800">
               <img
                 src={selectedImage}
                 alt="選択中の相談写真"
@@ -994,11 +915,11 @@ export const ShoppingAIChat: React.FC<ShoppingAIChatProps> = ({
               </button>
             </div>
             <div className="flex-1 min-w-0">
-              <div className="text-xs font-semibold text-emerald-950 flex items-center gap-1">
-                <Camera className="w-3.5 h-3.5 text-emerald-700 shrink-0" />
+              <div className="text-xs font-semibold text-emerald-950 dark:text-emerald-200 flex items-center gap-1">
+                <Camera className="w-3.5 h-3.5 text-emerald-700 dark:text-emerald-400 shrink-0" />
                 写真を追加しました
               </div>
-              <p className="text-[11px] text-emerald-800/80 truncate mt-0.5">
+              <p className="text-[11px] text-emerald-800/80 dark:text-emerald-300/80 truncate mt-0.5">
                 {input.trim() ? '入力内容と合わせて相談します' : 'このまま送信、または質問を入力できます'}
               </p>
             </div>
@@ -1008,7 +929,7 @@ export const ShoppingAIChat: React.FC<ShoppingAIChatProps> = ({
         {/* 写真選択時のクイック質問候補 */}
         {selectedImage && !input.trim() && (
           <div className="mb-2 flex items-center gap-1.5 overflow-x-auto pb-1 text-xs">
-            <span className="text-[11px] text-stone-500 shrink-0 font-medium pl-0.5">質問例:</span>
+            <span className="text-[11px] text-stone-500 dark:text-stone-400 shrink-0 font-medium pl-0.5">質問例:</span>
             {[
               'この値札・特売どう？',
               '今の候補と比べてどっちがいい？',
@@ -1019,7 +940,7 @@ export const ShoppingAIChat: React.FC<ShoppingAIChatProps> = ({
                 key={suggestText}
                 type="button"
                 onClick={() => setInput(suggestText)}
-                className="shrink-0 px-2.5 py-1 bg-white border border-stone-200 hover:border-emerald-500 text-stone-700 hover:text-emerald-700 rounded-full text-[11px] transition-colors cursor-pointer whitespace-nowrap active:scale-95"
+                className="shrink-0 px-2.5 py-1 bg-white dark:bg-stone-800 border border-stone-200 dark:border-stone-700 hover:border-emerald-500 dark:hover:border-emerald-400 text-stone-700 dark:text-stone-200 hover:text-emerald-700 dark:hover:text-emerald-300 rounded-full text-[11px] transition-colors cursor-pointer whitespace-nowrap active:scale-95"
               >
                 {suggestText}
               </button>
@@ -1042,8 +963,8 @@ export const ShoppingAIChat: React.FC<ShoppingAIChatProps> = ({
             disabled={isTyping || isProcessingPhoto}
             className={`w-11 h-11 rounded-full flex items-center justify-center transition-all shrink-0 cursor-pointer active:scale-95 touch-manipulation disabled:opacity-40 ${
               selectedImage
-                ? 'bg-emerald-100 text-emerald-700 ring-2 ring-emerald-500'
-                : 'bg-stone-100 hover:bg-stone-200 text-stone-600 hover:text-stone-900'
+                ? 'bg-emerald-100 dark:bg-emerald-950/80 text-emerald-700 dark:text-emerald-300 ring-2 ring-emerald-500'
+                : 'bg-stone-100 dark:bg-stone-800 hover:bg-stone-200 dark:hover:bg-stone-700 text-stone-600 dark:text-stone-300 hover:text-stone-900 dark:hover:text-stone-100'
             }`}
             title="写真で相談（カメラ撮影・ライブラリ選択）"
             aria-label="写真で相談"
@@ -1051,7 +972,7 @@ export const ShoppingAIChat: React.FC<ShoppingAIChatProps> = ({
             <Camera className="w-5 h-5" />
           </button>
 
-          <div className="flex-1 bg-stone-100 rounded-2xl border border-stone-200 focus-within:border-emerald-500 focus-within:bg-white transition-colors px-3.5 py-1.5 flex items-center">
+          <div className="flex-1 bg-stone-100 dark:bg-stone-800 rounded-2xl border border-stone-200 dark:border-stone-700 focus-within:border-emerald-500 dark:focus-within:border-emerald-500 focus-within:bg-white dark:focus-within:bg-stone-850 transition-colors px-3.5 py-1.5 flex items-center">
             <textarea
               id="input-chat-message"
               ref={textareaRef}
@@ -1064,7 +985,7 @@ export const ShoppingAIChat: React.FC<ShoppingAIChatProps> = ({
                   : '今の状況や気分を入力... (例: 疲れてるから20分で)'
               }
               rows={1}
-              className="w-full resize-none bg-transparent border-0 focus:outline-hidden text-sm text-stone-900 placeholder:text-stone-400 max-h-28 py-1 leading-relaxed"
+              className="w-full resize-none bg-transparent border-0 focus:outline-hidden text-sm text-stone-900 dark:text-stone-100 placeholder:text-stone-400 dark:placeholder:text-stone-500 max-h-28 py-1 leading-relaxed"
             />
           </div>
 
@@ -1121,61 +1042,61 @@ export const ShoppingAIChat: React.FC<ShoppingAIChatProps> = ({
       {showMemoryModal && (
         <div
           id="modal-memory-backdrop"
-          className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4"
+          className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4"
           onClick={() => setShowMemoryModal(false)}
         >
           <div
             id="modal-memory-card"
-            className="w-full sm:max-w-md bg-white rounded-t-2xl sm:rounded-2xl border border-stone-200 shadow-xl overflow-hidden animate-in fade-in slide-in-from-bottom-4 duration-150"
+            className="w-full sm:max-w-md bg-white dark:bg-stone-900 rounded-t-2xl sm:rounded-2xl border border-stone-200 dark:border-stone-800 shadow-xl overflow-hidden animate-in fade-in slide-in-from-bottom-4 duration-150"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center justify-between px-5 py-4 border-b border-stone-100 bg-stone-50/70">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-stone-100 dark:border-stone-800 bg-stone-50/70 dark:bg-stone-900/90">
               <div className="flex items-center gap-2">
-                <HardDrive className="w-5 h-5 text-emerald-700" />
-                <h3 className="font-semibold text-stone-900 text-base">Google Drive Memory</h3>
+                <HardDrive className="w-5 h-5 text-emerald-700 dark:text-emerald-400" />
+                <h3 className="font-semibold text-stone-900 dark:text-stone-100 text-base">Google Drive Memory</h3>
               </div>
               <button
                 type="button"
                 id="btn-close-memory-modal"
                 onClick={() => setShowMemoryModal(false)}
-                className="p-1.5 text-stone-400 hover:text-stone-700 rounded-full hover:bg-stone-200/60 transition-colors cursor-pointer"
+                className="p-1.5 text-stone-400 hover:text-stone-700 dark:text-stone-500 dark:hover:text-stone-200 rounded-full hover:bg-stone-200/60 dark:hover:bg-stone-800 transition-colors cursor-pointer"
                 aria-label="閉じる"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <div className="p-5 space-y-4 text-sm text-stone-600">
+            <div className="p-5 space-y-4 text-sm text-stone-600 dark:text-stone-300">
               {memoryConnectionId ? (
                 <div className="space-y-4">
-                  <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center justify-between">
+                  <div className="p-3 bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 rounded-xl flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <span className="w-2.5 h-2.5 rounded-full bg-emerald-600 animate-pulse" />
-                      <span className="font-medium text-emerald-900">接続中（Active）</span>
+                      <span className="font-medium text-emerald-900 dark:text-emerald-200">接続中（Active）</span>
                     </div>
-                    <span className="text-xs text-emerald-700 bg-emerald-100/60 px-2 py-0.5 rounded-md font-mono">
+                    <span className="text-xs text-emerald-700 dark:text-emerald-300 bg-emerald-100/60 dark:bg-emerald-900/60 px-2 py-0.5 rounded-md font-mono">
                       Google Drive
                     </span>
                   </div>
 
                   <div>
-                    <label className="block text-xs font-medium text-stone-500 mb-1">
+                    <label className="block text-xs font-medium text-stone-500 dark:text-stone-400 mb-1">
                       接続ID (memory_connection_id)
                     </label>
-                    <div className="flex items-center gap-2 p-2 bg-stone-100 rounded-lg border border-stone-200 font-mono text-xs text-stone-800 break-all">
+                    <div className="flex items-center gap-2 p-2 bg-stone-100 dark:bg-stone-800 rounded-lg border border-stone-200 dark:border-stone-700 font-mono text-xs text-stone-800 dark:text-stone-200 break-all">
                       <span className="flex-1">{memoryConnectionId}</span>
                       <button
                         type="button"
                         onClick={handleCopyConnectionId}
-                        className="p-1.5 text-stone-500 hover:text-stone-800 rounded hover:bg-stone-200 transition-colors shrink-0 cursor-pointer"
+                        className="p-1.5 text-stone-500 hover:text-stone-800 dark:text-stone-400 dark:hover:text-stone-200 rounded hover:bg-stone-200 dark:hover:bg-stone-700 transition-colors shrink-0 cursor-pointer"
                         title="IDをコピー"
                       >
-                        {copiedId ? <Check className="w-4 h-4 text-emerald-600" /> : <Copy className="w-4 h-4" />}
+                        {copiedId ? <Check className="w-4 h-4 text-emerald-600 dark:text-emerald-400" /> : <Copy className="w-4 h-4" />}
                       </button>
                     </div>
                   </div>
 
-                  <p className="text-xs leading-relaxed text-stone-500">
+                  <p className="text-xs leading-relaxed text-stone-500 dark:text-stone-400">
                     ユーザー自身のGoogle Drive上のMemory領域がマウントされています。セッション実行時にパーソナライズされた食材や嗜好のコンテキストが反映されます。
                   </p>
 
@@ -1187,23 +1108,23 @@ export const ShoppingAIChat: React.FC<ShoppingAIChatProps> = ({
                         setShowMemoryModal(false);
                         setShowMemoryRomModal(true);
                       }}
-                      className="w-full py-2.5 px-4 bg-emerald-50 text-emerald-800 hover:bg-emerald-100 border border-emerald-200 rounded-xl font-medium text-sm transition-colors cursor-pointer flex items-center justify-center gap-2 active:scale-98"
+                      className="w-full py-2.5 px-4 bg-emerald-50 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/80 border border-emerald-200 dark:border-emerald-800 rounded-xl font-medium text-sm transition-colors cursor-pointer flex items-center justify-center gap-2 active:scale-98"
                     >
-                      <Database className="w-4 h-4 text-emerald-700" />
+                      <Database className="w-4 h-4 text-emerald-700 dark:text-emerald-400" />
                       <span>保存された記憶（ROM一覧）を確認</span>
                     </button>
                     <button
                       type="button"
                       id="btn-disconnect-memory"
                       onClick={handleDisconnectMemory}
-                      className="w-full py-2.5 px-4 bg-red-50 text-red-700 hover:bg-red-100 border border-red-200 rounded-xl font-medium text-sm transition-colors cursor-pointer active:scale-98"
+                      className="w-full py-2.5 px-4 bg-red-50 dark:bg-red-950/60 text-red-700 dark:text-red-300 hover:bg-red-100 dark:hover:bg-red-900/80 border border-red-200 dark:border-red-800 rounded-xl font-medium text-sm transition-colors cursor-pointer active:scale-98"
                     >
                       Memoryを切断する（Eject）
                     </button>
                     <button
                       type="button"
                       onClick={() => setShowMemoryModal(false)}
-                      className="w-full py-2 text-stone-500 hover:text-stone-800 text-sm font-medium cursor-pointer"
+                      className="w-full py-2 text-stone-500 hover:text-stone-800 dark:text-stone-400 dark:hover:text-stone-200 text-sm font-medium cursor-pointer"
                     >
                       閉じる
                     </button>
@@ -1226,9 +1147,9 @@ export const ShoppingAIChat: React.FC<ShoppingAIChatProps> = ({
                   </button>
 
                   <div className="relative flex py-1 items-center">
-                    <div className="flex-grow border-t border-stone-200"></div>
-                    <span className="flex-shrink mx-3 text-xs text-stone-400">または接続IDを直接入力</span>
-                    <div className="flex-grow border-t border-stone-200"></div>
+                    <div className="flex-grow border-t border-stone-200 dark:border-stone-750"></div>
+                    <span className="flex-shrink mx-3 text-xs text-stone-400 dark:text-stone-500">または接続IDを直接入力</span>
+                    <div className="flex-grow border-t border-stone-200 dark:border-stone-750"></div>
                   </div>
 
                   <form onSubmit={handleApplyManualMemoryId} className="space-y-2">
@@ -1238,13 +1159,13 @@ export const ShoppingAIChat: React.FC<ShoppingAIChatProps> = ({
                       value={manualMemoryId}
                       onChange={(e) => setManualMemoryId(e.target.value)}
                       placeholder="memory_connection_id を貼り付け"
-                      className="w-full px-3 py-2 text-xs font-mono bg-stone-50 border border-stone-200 rounded-lg focus:outline-emerald-500 focus:bg-white transition-colors"
+                      className="w-full px-3 py-2 text-xs font-mono bg-stone-50 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 text-stone-900 dark:text-stone-100 rounded-lg focus:outline-emerald-500 focus:bg-white dark:focus:bg-stone-850 transition-colors"
                     />
                     <button
                       id="btn-apply-memory-id"
                       type="submit"
                       disabled={!manualMemoryId.trim()}
-                      className="w-full py-2 px-3 bg-stone-800 hover:bg-stone-900 disabled:opacity-40 text-white rounded-lg text-xs font-medium transition-colors cursor-pointer"
+                      className="w-full py-2 px-3 bg-stone-800 dark:bg-stone-700 hover:bg-stone-900 dark:hover:bg-stone-600 disabled:opacity-40 text-white rounded-lg text-xs font-medium transition-colors cursor-pointer"
                     >
                       接続IDを適用
                     </button>
@@ -1260,24 +1181,24 @@ export const ShoppingAIChat: React.FC<ShoppingAIChatProps> = ({
       {showPhotoSheet && (
         <div
           id="sheet-photo-backdrop"
-          className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-end justify-center p-0 sm:p-4 animate-in fade-in duration-150"
+          className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-end justify-center p-0 sm:p-4 animate-in fade-in duration-150"
           onClick={() => setShowPhotoSheet(false)}
         >
           <div
             id="sheet-photo-content"
-            className="w-full sm:max-w-md bg-white rounded-t-3xl sm:rounded-2xl border border-stone-200 shadow-2xl overflow-hidden animate-in slide-in-from-bottom duration-200"
+            className="w-full sm:max-w-md bg-white dark:bg-stone-900 rounded-t-3xl sm:rounded-2xl border border-stone-200 dark:border-stone-800 shadow-2xl overflow-hidden animate-in slide-in-from-bottom duration-200"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="p-4 border-b border-stone-100 flex items-center justify-between bg-stone-50/80">
+            <div className="p-4 border-b border-stone-100 dark:border-stone-800 flex items-center justify-between bg-stone-50/80 dark:bg-stone-900/90">
               <div className="flex items-center gap-2">
-                <Camera className="w-5 h-5 text-emerald-700" />
-                <h3 className="font-semibold text-stone-900 text-base">写真で相談する</h3>
+                <Camera className="w-5 h-5 text-emerald-700 dark:text-emerald-400" />
+                <h3 className="font-semibold text-stone-900 dark:text-stone-100 text-base">写真で相談する</h3>
               </div>
               <button
                 type="button"
                 id="btn-close-photo-sheet"
                 onClick={() => setShowPhotoSheet(false)}
-                className="p-1.5 text-stone-400 hover:text-stone-700 rounded-full hover:bg-stone-200/60 transition-colors cursor-pointer"
+                className="p-1.5 text-stone-400 hover:text-stone-700 dark:text-stone-500 dark:hover:text-stone-200 rounded-full hover:bg-stone-200/60 dark:hover:bg-stone-800 transition-colors cursor-pointer"
                 aria-label="閉じる"
               >
                 <X className="w-5 h-5" />
@@ -1285,7 +1206,7 @@ export const ShoppingAIChat: React.FC<ShoppingAIChatProps> = ({
             </div>
 
             <div className="p-4 space-y-3">
-              <p className="text-xs text-stone-500 leading-relaxed">
+              <p className="text-xs text-stone-500 dark:text-stone-400 leading-relaxed">
                 スーパーの商品、値札、特売シール、チラシ、手持ちの食材などを撮影または選択して、Shopping AIと相談できます。
               </p>
 
@@ -1296,16 +1217,16 @@ export const ShoppingAIChat: React.FC<ShoppingAIChatProps> = ({
                   setShowPhotoSheet(false);
                   cameraInputRef.current?.click();
                 }}
-                className="w-full flex items-center gap-3.5 p-3.5 rounded-2xl border border-stone-200 hover:border-emerald-500 hover:bg-emerald-50/40 active:bg-emerald-100/50 transition-all text-left cursor-pointer group"
+                className="w-full flex items-center gap-3.5 p-3.5 rounded-2xl border border-stone-200 dark:border-stone-700 hover:border-emerald-500 dark:hover:border-emerald-500 hover:bg-emerald-50/40 dark:hover:bg-emerald-950/40 active:bg-emerald-100/50 dark:active:bg-emerald-900/50 transition-all text-left cursor-pointer group"
               >
-                <div className="w-11 h-11 rounded-xl bg-emerald-100 text-emerald-800 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform shadow-2xs">
+                <div className="w-11 h-11 rounded-xl bg-emerald-100 dark:bg-emerald-900/80 text-emerald-800 dark:text-emerald-200 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform shadow-2xs">
                   <Camera className="w-5 h-5" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="font-semibold text-stone-900 text-sm">その場でカメラ撮影</div>
-                  <div className="text-xs text-stone-500 mt-0.5">売り場の商品や値札、半額シールを直接撮影します</div>
+                  <div className="font-semibold text-stone-900 dark:text-stone-100 text-sm">その場でカメラ撮影</div>
+                  <div className="text-xs text-stone-500 dark:text-stone-400 mt-0.5">売り場の商品や値札、半額シールを直接撮影します</div>
                 </div>
-                <ChevronRight className="w-4 h-4 text-stone-400 group-hover:text-emerald-700 shrink-0" />
+                <ChevronRight className="w-4 h-4 text-stone-400 dark:text-stone-500 group-hover:text-emerald-700 dark:group-hover:text-emerald-400 shrink-0" />
               </button>
 
               <button
@@ -1315,23 +1236,23 @@ export const ShoppingAIChat: React.FC<ShoppingAIChatProps> = ({
                   setShowPhotoSheet(false);
                   libraryInputRef.current?.click();
                 }}
-                className="w-full flex items-center gap-3.5 p-3.5 rounded-2xl border border-stone-200 hover:border-blue-500 hover:bg-blue-50/40 active:bg-blue-100/50 transition-all text-left cursor-pointer group"
+                className="w-full flex items-center gap-3.5 p-3.5 rounded-2xl border border-stone-200 dark:border-stone-700 hover:border-blue-500 dark:hover:border-blue-500 hover:bg-blue-50/40 dark:hover:bg-blue-950/40 active:bg-blue-100/50 dark:active:bg-blue-900/50 transition-all text-left cursor-pointer group"
               >
-                <div className="w-11 h-11 rounded-xl bg-blue-100 text-blue-800 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform shadow-2xs">
+                <div className="w-11 h-11 rounded-xl bg-blue-100 dark:bg-blue-900/80 text-blue-800 dark:text-blue-200 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform shadow-2xs">
                   <Camera className="w-5 h-5" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="font-semibold text-stone-900 text-sm">写真ライブラリから選択</div>
-                  <div className="text-xs text-stone-500 mt-0.5">保存済みの写真やチラシ画像を選びます</div>
+                  <div className="font-semibold text-stone-900 dark:text-stone-100 text-sm">写真ライブラリから選択</div>
+                  <div className="text-xs text-stone-500 dark:text-stone-400 mt-0.5">保存済みの写真やチラシ画像を選びます</div>
                 </div>
-                <ChevronRight className="w-4 h-4 text-stone-400 group-hover:text-blue-700 shrink-0" />
+                <ChevronRight className="w-4 h-4 text-stone-400 dark:text-stone-500 group-hover:text-blue-700 dark:group-hover:text-blue-400 shrink-0" />
               </button>
 
               <button
                 type="button"
                 id="btn-cancel-photo-sheet"
                 onClick={() => setShowPhotoSheet(false)}
-                className="w-full py-2.5 text-center text-sm font-medium text-stone-600 hover:text-stone-900 bg-stone-100 rounded-xl cursor-pointer active:scale-98 transition-all"
+                className="w-full py-2.5 text-center text-sm font-medium text-stone-600 dark:text-stone-300 hover:text-stone-900 dark:hover:text-stone-100 bg-stone-100 dark:bg-stone-800 rounded-xl cursor-pointer active:scale-98 transition-all"
               >
                 キャンセル
               </button>
@@ -1376,6 +1297,272 @@ export const ShoppingAIChat: React.FC<ShoppingAIChatProps> = ({
         activeSessionTitle={activeSession?.title}
         onOpenConnectModal={() => setShowMemoryModal(true)}
       />
+
+      {/* 12. アプリ共通メニュー (App Menu Drawer) */}
+      {showAppMenu && (
+        <div
+          id="menu-drawer-backdrop"
+          className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-end sm:items-center justify-end p-0 sm:p-4 animate-in fade-in duration-150"
+          onClick={() => setShowAppMenu(false)}
+        >
+          <div
+            id="menu-drawer-content"
+            className="w-full sm:max-w-sm bg-white dark:bg-stone-900 rounded-t-3xl sm:rounded-2xl border border-stone-200 dark:border-stone-800 shadow-2xl overflow-hidden animate-in slide-in-from-right sm:slide-in-from-bottom duration-200 max-h-[90vh] flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* ヘッダー */}
+            <div className="p-4 border-b border-stone-100 dark:border-stone-800 flex items-center justify-between bg-stone-50/90 dark:bg-stone-900/90 shrink-0">
+              <div className="flex items-center gap-2">
+                <div className="w-7 h-7 rounded-full bg-emerald-600 text-white flex items-center justify-center font-bold text-xs shadow-2xs">
+                  <Sparkles className="w-3.5 h-3.5" />
+                </div>
+                <h3 className="font-bold text-stone-900 dark:text-stone-100 text-sm">Shopping AI メニュー</h3>
+              </div>
+              <button
+                type="button"
+                id="btn-close-app-menu"
+                onClick={() => setShowAppMenu(false)}
+                className="p-1.5 text-stone-400 hover:text-stone-700 dark:text-stone-500 dark:hover:text-stone-200 rounded-full hover:bg-stone-200/60 dark:hover:bg-stone-800 transition-colors cursor-pointer"
+                aria-label="メニューを閉じる"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-4 overflow-y-auto space-y-4 flex-1">
+              {/* テーマ切替セレクター */}
+              <div className="p-3 bg-stone-50 dark:bg-stone-800/70 rounded-2xl border border-stone-200 dark:border-stone-700/80 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-bold text-stone-500 dark:text-stone-400 uppercase tracking-wider">
+                    外観モード (テーマ)
+                  </span>
+                  <span className="text-[11px] text-stone-400 dark:text-stone-400">
+                    {theme === 'system' ? '端末設定連動' : theme === 'dark' ? 'ダーク' : 'ライト'}
+                  </span>
+                </div>
+                <div className="grid grid-cols-3 gap-1.5 p-1 bg-stone-200/60 dark:bg-stone-900/80 rounded-xl">
+                  <button
+                    type="button"
+                    id="btn-theme-light"
+                    onClick={() => setTheme('light')}
+                    className={`flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                      theme === 'light'
+                        ? 'bg-white dark:bg-stone-800 text-stone-900 dark:text-stone-100 shadow-2xs'
+                        : 'text-stone-600 dark:text-stone-400 hover:text-stone-900 dark:hover:text-stone-200'
+                    }`}
+                  >
+                    <Sun className="w-3.5 h-3.5 text-amber-500" />
+                    <span>ライト</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    id="btn-theme-dark"
+                    onClick={() => setTheme('dark')}
+                    className={`flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                      theme === 'dark'
+                        ? 'bg-white dark:bg-stone-800 text-stone-900 dark:text-stone-100 shadow-2xs'
+                        : 'text-stone-600 dark:text-stone-400 hover:text-stone-900 dark:hover:text-stone-200'
+                    }`}
+                  >
+                    <Moon className="w-3.5 h-3.5 text-indigo-400" />
+                    <span>ダーク</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    id="btn-theme-system"
+                    onClick={() => setTheme('system')}
+                    className={`flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                      theme === 'system'
+                        ? 'bg-white dark:bg-stone-800 text-stone-900 dark:text-stone-100 shadow-2xs'
+                        : 'text-stone-600 dark:text-stone-400 hover:text-stone-900 dark:hover:text-stone-200'
+                    }`}
+                  >
+                    <Monitor className="w-3.5 h-3.5 text-emerald-500" />
+                    <span>端末連動</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* 現在のセッションカード */}
+              <div className="p-3 bg-stone-50 dark:bg-stone-800/70 rounded-2xl border border-stone-200 dark:border-stone-700/80 space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[11px] font-bold text-stone-500 dark:text-stone-400 uppercase tracking-wider">
+                    現在のセッション
+                  </span>
+                  <span
+                    className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${
+                      activeSession.status === 'in_progress'
+                        ? 'bg-emerald-100 dark:bg-emerald-950/80 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800'
+                        : 'bg-stone-200 dark:bg-stone-700 text-stone-700 dark:text-stone-300'
+                    }`}
+                  >
+                    {activeSession.status === 'in_progress' ? '進行中' : '完了'}
+                  </span>
+                </div>
+                <p className="text-xs font-bold text-stone-900 dark:text-stone-100 truncate">{activeSession.title}</p>
+                <div className="flex items-center justify-between text-[11px] text-stone-500 dark:text-stone-400 pt-1 border-t border-stone-200/60 dark:border-stone-700/60">
+                  <span className="font-mono text-[10.5px]">{activeSession.date}</span>
+                  <button
+                    type="button"
+                    id="btn-menu-switch-session"
+                    onClick={() => {
+                      setShowAppMenu(false);
+                      setShowSessionDrawer(true);
+                    }}
+                    className="text-emerald-700 dark:text-emerald-400 hover:text-emerald-800 dark:hover:text-emerald-300 font-semibold cursor-pointer"
+                  >
+                    セッション一覧 ›
+                  </button>
+                </div>
+              </div>
+
+              {/* メニューアイテム一覧 */}
+              <div className="space-y-1.5">
+                {/* 1. セッション一覧 */}
+                <button
+                  type="button"
+                  id="menu-item-sessions"
+                  onClick={() => {
+                    setShowAppMenu(false);
+                    setShowSessionDrawer(true);
+                  }}
+                  className="w-full flex items-center gap-3 p-3 rounded-xl hover:bg-stone-100 dark:hover:bg-stone-800 active:bg-stone-200 dark:active:bg-stone-700 transition-colors text-left cursor-pointer group border border-transparent hover:border-stone-200 dark:hover:border-stone-700"
+                >
+                  <div className="w-9 h-9 rounded-xl bg-stone-100 dark:bg-stone-800 group-hover:bg-emerald-100 dark:group-hover:bg-emerald-950/80 text-stone-600 dark:text-stone-300 group-hover:text-emerald-700 dark:group-hover:text-emerald-300 flex items-center justify-center shrink-0 transition-colors">
+                    <Layers className="w-4 h-4" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-stone-900 dark:text-stone-100">セッション一覧</span>
+                      <span className="text-[11px] font-semibold text-stone-500 dark:text-stone-400 bg-stone-100 dark:bg-stone-800 px-2 py-0.5 rounded-full">
+                        {sessions.length}件
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-stone-500 dark:text-stone-400 truncate mt-0.5">セッションの切り替え・新規作成・削除</p>
+                  </div>
+                </button>
+
+                {/* 2. 記憶（ROM）管理 */}
+                <button
+                  type="button"
+                  id="menu-item-memory-rom"
+                  onClick={() => {
+                    setShowAppMenu(false);
+                    setShowMemoryRomModal(true);
+                  }}
+                  className="w-full flex items-center gap-3 p-3 rounded-xl hover:bg-stone-100 dark:hover:bg-stone-800 active:bg-stone-200 dark:active:bg-stone-700 transition-colors text-left cursor-pointer group border border-transparent hover:border-stone-200 dark:hover:border-stone-700"
+                >
+                  <div className="w-9 h-9 rounded-xl bg-stone-100 dark:bg-stone-800 group-hover:bg-amber-100 dark:group-hover:bg-amber-950/80 text-stone-600 dark:text-stone-300 group-hover:text-amber-700 dark:group-hover:text-amber-300 flex items-center justify-center shrink-0 transition-colors">
+                    <Database className="w-4 h-4" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-stone-900 dark:text-stone-100">記憶（ROM）管理</span>
+                      <span className="text-[10px] text-stone-400 dark:text-stone-500 font-mono">Google Drive</span>
+                    </div>
+                    <p className="text-[11px] text-stone-500 dark:text-stone-400 truncate mt-0.5">献立・特売・食材ROMデータの確認</p>
+                  </div>
+                </button>
+
+                {/* 3. 対話記録（全件ログ） */}
+                <button
+                  type="button"
+                  id="menu-item-conversation-history"
+                  onClick={() => {
+                    setShowAppMenu(false);
+                    setShowConversationReview(true);
+                  }}
+                  className="w-full flex items-center gap-3 p-3 rounded-xl hover:bg-stone-100 dark:hover:bg-stone-800 active:bg-stone-200 dark:active:bg-stone-700 transition-colors text-left cursor-pointer group border border-transparent hover:border-stone-200 dark:hover:border-stone-700"
+                >
+                  <div className="w-9 h-9 rounded-xl bg-stone-100 dark:bg-stone-800 group-hover:bg-blue-100 dark:group-hover:bg-blue-950/80 text-stone-600 dark:text-stone-300 group-hover:text-blue-700 dark:group-hover:text-blue-300 flex items-center justify-center shrink-0 transition-colors">
+                    <History className="w-4 h-4" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-stone-900 dark:text-stone-100">対話記録（全件ログ）</span>
+                      <span className="text-[11px] font-semibold text-stone-500 dark:text-stone-400 bg-stone-100 dark:bg-stone-800 px-2 py-0.5 rounded-full">
+                        {conversationRecord.length}件
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-stone-500 dark:text-stone-400 truncate mt-0.5">これまでのメッセージと相談写真の確認</p>
+                  </div>
+                </button>
+
+                {/* 4. 状況・認識詳細ボード */}
+                <button
+                  type="button"
+                  id="menu-item-status-detail"
+                  onClick={() => {
+                    setShowAppMenu(false);
+                    setShowStatusDetailModal(true);
+                  }}
+                  className="w-full flex items-center gap-3 p-3 rounded-xl hover:bg-stone-100 dark:hover:bg-stone-800 active:bg-stone-200 dark:active:bg-stone-700 transition-colors text-left cursor-pointer group border border-transparent hover:border-stone-200 dark:hover:border-stone-700"
+                >
+                  <div className="w-9 h-9 rounded-xl bg-stone-100 dark:bg-stone-800 group-hover:bg-teal-100 dark:group-hover:bg-teal-950/80 text-stone-600 dark:text-stone-300 group-hover:text-teal-700 dark:group-hover:text-teal-300 flex items-center justify-center shrink-0 transition-colors">
+                    <BookOpen className="w-4 h-4" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <span className="text-xs font-bold text-stone-900 dark:text-stone-100">状況・認識詳細</span>
+                    <p className="text-[11px] text-stone-500 dark:text-stone-400 truncate mt-0.5">前提条件・献立候補・手持ち食材の確認</p>
+                  </div>
+                </button>
+
+                {/* 5. Google Drive 接続設定 */}
+                <button
+                  type="button"
+                  id="menu-item-memory-setting"
+                  onClick={() => {
+                    setShowAppMenu(false);
+                    setShowMemoryModal(true);
+                  }}
+                  className="w-full flex items-center gap-3 p-3 rounded-xl hover:bg-stone-100 dark:hover:bg-stone-800 active:bg-stone-200 dark:active:bg-stone-700 transition-colors text-left cursor-pointer group border border-transparent hover:border-stone-200 dark:hover:border-stone-700"
+                >
+                  <div className="w-9 h-9 rounded-xl bg-stone-100 dark:bg-stone-800 group-hover:bg-emerald-100 dark:group-hover:bg-emerald-950/80 text-stone-600 dark:text-stone-300 group-hover:text-emerald-700 dark:group-hover:text-emerald-300 flex items-center justify-center shrink-0 transition-colors">
+                    <HardDrive className="w-4 h-4" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-stone-900 dark:text-stone-100">Google Drive 接続設定</span>
+                      <span
+                        className={`text-[10px] px-1.5 py-0.2 rounded font-semibold ${
+                          memoryConnectionId
+                            ? 'bg-emerald-100 dark:bg-emerald-950/80 text-emerald-800 dark:text-emerald-300'
+                            : 'bg-stone-200 dark:bg-stone-800 text-stone-600 dark:text-stone-400'
+                        }`}
+                      >
+                        {memoryConnectionId ? '接続中' : '未接続'}
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-stone-500 dark:text-stone-400 truncate mt-0.5">
+                      {memoryConnectionId
+                        ? '接続状態の確認・切断'
+                        : 'Google Driveと連携して長期記憶を有効化'}
+                    </p>
+                  </div>
+                </button>
+              </div>
+
+              {/* 新規セッション開始ボタン */}
+              <div className="pt-2 border-t border-stone-200 dark:border-stone-800">
+                <button
+                  type="button"
+                  id="menu-action-new-session"
+                  onClick={() => {
+                    setShowAppMenu(false);
+                    handleCreateSession();
+                  }}
+                  className="w-full py-2.5 px-3 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 shadow-xs cursor-pointer transition-colors"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>新しいセッションを開始</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
