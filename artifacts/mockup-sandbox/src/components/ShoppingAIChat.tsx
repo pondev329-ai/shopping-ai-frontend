@@ -106,6 +106,7 @@ export const ShoppingAIChat: React.FC<ShoppingAIChatProps> = ({
 
   // 5. 写真相談用のステート
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
+  const [selectedImageFilename, setSelectedImageFilename] = useState<string | null>(null);
   const [isProcessingPhoto, setIsProcessingPhoto] = useState(false);
   const [showPhotoSheet, setShowPhotoSheet] = useState(false);
   const [previewModalImage, setPreviewModalImage] = useState<string | null>(null);
@@ -371,6 +372,7 @@ export const ShoppingAIChat: React.FC<ShoppingAIChatProps> = ({
     try {
       setPhotoError(null);
       setIsProcessingPhoto(true);
+      setSelectedImageFilename(file.name || null);
       const compressedDataUrl = await compressImageToDataUrl(file);
       setSelectedImage(compressedDataUrl);
     } catch (err) {
@@ -385,6 +387,7 @@ export const ShoppingAIChat: React.FC<ShoppingAIChatProps> = ({
   const handleSend = async (overrideText?: string) => {
     const textToSend = (overrideText ?? input).trim();
     const imageToSend = selectedImage;
+    const imageFilenameToSend = selectedImageFilename;
     if ((!textToSend && !imageToSend) || isTyping || isProcessingPhoto) return;
 
     const messageContent =
@@ -420,8 +423,62 @@ export const ShoppingAIChat: React.FC<ShoppingAIChatProps> = ({
       setInput('');
     }
     setSelectedImage(null);
+    setSelectedImageFilename(null);
     setPhotoError(null);
     setIsTyping(true);
+
+    // Google Drive Memory 接続中の場合、Session ImageとしてGoogle Driveへ非同期保存 (Main Flow相談とは完全分離)
+    if (imageToSend) {
+      const rawMemoryId =
+        memoryConnectionId ||
+        (chatService.getMemoryConnectionId ? chatService.getMemoryConnectionId() : null);
+      const validMemoryConnectionId =
+        typeof rawMemoryId === 'string' &&
+        rawMemoryId.trim().length > 0 &&
+        rawMemoryId.trim() !== 'null' &&
+        rawMemoryId.trim() !== 'undefined'
+          ? rawMemoryId.trim()
+          : null;
+
+      if (validMemoryConnectionId && chatService.saveSessionImage) {
+        const sessionIdForSave = activeSession.id;
+        const filenameForSave = imageFilenameToSend || `photo_${Date.now()}.jpg`;
+
+        // 簡易なimage_kind判定 (チラシ/売場/商品)
+        let inferredKind: 'product' | 'shelf' | 'flyer' | 'other' = 'product';
+        const lowerText = (textToSend || '').toLowerCase();
+        if (lowerText.includes('チラシ') || lowerText.includes('広告') || lowerText.includes('flyer')) {
+          inferredKind = 'flyer';
+        } else if (
+          lowerText.includes('棚') ||
+          lowerText.includes('売り場') ||
+          lowerText.includes('売場') ||
+          lowerText.includes('shelf')
+        ) {
+          inferredKind = 'shelf';
+        }
+
+        // 写真相談本体の処理と分離して実行（保存失敗でも相談そのものは成功扱いのまま維持）
+        chatService
+          .saveSessionImage({
+            sessionId: sessionIdForSave,
+            file: imageToSend,
+            filename: filenameForSave,
+            imageKind: inferredKind,
+            connectionId: validMemoryConnectionId,
+          })
+          .then((res) => {
+            if (!res.success) {
+              console.warn('[SessionImage] Google Driveへの写真保存に失敗しました (写真相談は継続):', res.error);
+            } else {
+              console.log('[SessionImage] Google Driveへ写真を正常に保存しました (session_id:', sessionIdForSave, ')');
+            }
+          })
+          .catch((err) => {
+            console.warn('[SessionImage] 写真保存処理で例外が発生しました (写真相談は継続):', err);
+          });
+      }
+    }
 
     try {
       // Backendへ送信（現在セッションIDも伝達）
@@ -994,7 +1051,10 @@ export const ShoppingAIChat: React.FC<ShoppingAIChatProps> = ({
               <button
                 type="button"
                 id="btn-remove-selected-photo"
-                onClick={() => setSelectedImage(null)}
+                onClick={() => {
+                  setSelectedImage(null);
+                  setSelectedImageFilename(null);
+                }}
                 className="absolute top-0.5 right-0.5 w-4 h-4 bg-black/75 text-white rounded-full flex items-center justify-center hover:bg-black transition-colors cursor-pointer"
                 title="写真を解除"
                 aria-label="写真を解除"

@@ -250,3 +250,21 @@ export interface GetConversationTimelineResult {
   error?: string;
   fromDrive?: boolean;
 }
+
+/**
+ * 写真をGoogle Drive Memory (Session Image) へ保存するパラメータと結果
+ * (Render POST /memory/image/put 経由)
+ */
+export interface SaveSessionImageParams {
+  sessionId: string;
+  file: string; // Base64 または Data URL (data:image/jpeg;base64,...)
+  filename?: string;
+  imageKind?: 'product' | 'shelf' | 'flyer' | 'other';
+  connectionId?: string;
+}
+
+export interface SaveSessionImageResult {
+  success: boolean;
+  error?: string;
+  data?: unknown;
+}

@@ -9,6 +9,8 @@ import {
   GetConversationTimelineParams,
   GetConversationTimelineResult,
   MemoryTimelineRecord,
+  SaveSessionImageParams,
+  SaveSessionImageResult,
 } from '../types/memory';
 
 /**
@@ -30,6 +32,7 @@ export interface ChatService {
   deleteMemorySession?(sessionId: string, connectionId?: string): Promise<{ success: boolean; error?: string }>;
   getMemorySession?(sessionId: string, connectionId?: string): Promise<{ success: boolean; state?: Record<string, unknown> | null; error?: string }>;
   getConversationTimeline?(sessionId: string, connectionId?: string): Promise<GetConversationTimelineResult>;
+  saveSessionImage?(params: SaveSessionImageParams): Promise<SaveSessionImageResult>;
   listMemoryRom?(params?: ListMemoryRomParams): Promise<ListMemoryRomResult>;
   deleteMemoryRomItem?(params: DeleteMemoryRomParams): Promise<DeleteMemoryRomResult>;
   onMemoryConnectionChange?(callback: (id: string | null) => void): () => void;
@@ -674,6 +677,100 @@ export class RenderBackendChatAdapter implements ChatService {
         messages: [],
         error: `通信エラー: ${errMsg}`,
         fromDrive: false,
+      };
+    }
+  }
+
+  /**
+   * 写真をSession ImageとしてGoogle Drive Memoryへ保存します。
+   * Flow: Frontend -> Render /memory/image/put -> Memory Flow put_image -> Google Drive
+   * 
+   * 送信ペイロード:
+   * {
+   *   "memory_connection_id": "<現在のMemory接続ID>",
+   *   "session_id": "<現在のセッションID>",
+   *   "memory_type": "saved_photo",
+   *   "image_kind": "product" | "shelf" | "flyer" | "other",
+   *   "filename": "<元画像または適切な画像ファイル名>",
+   *   "file": "<Base64データまたはData URL>"
+   * }
+   */
+  async saveSessionImage(
+    params: SaveSessionImageParams
+  ): Promise<SaveSessionImageResult> {
+    const activeConnectionId = (params.connectionId ?? this.memoryConnectionId)?.trim();
+    if (!activeConnectionId || activeConnectionId === 'null' || activeConnectionId === 'undefined') {
+      return {
+        success: false,
+        error: 'Memory未接続です',
+      };
+    }
+
+    if (!params.file) {
+      return {
+        success: false,
+        error: '画像データが存在しません',
+      };
+    }
+
+    const imageUrl = `${this.baseUrl}/memory/image/put`;
+    const filename = params.filename || `photo_${Date.now()}.jpg`;
+    const payload = {
+      memory_connection_id: activeConnectionId,
+      session_id: params.sessionId,
+      memory_type: 'saved_photo',
+      image_kind: params.imageKind || 'product',
+      filename,
+      file: params.file,
+    };
+
+    try {
+      const response = await fetch(imageUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        let errorDetail = `HTTP ${response.status}`;
+        try {
+          const errData = await response.json();
+          if (errData.detail || errData.error || errData.message) {
+            errorDetail = errData.detail || errData.error || errData.message;
+          }
+        } catch {
+          try {
+            const errText = await response.text();
+            if (errText) errorDetail = errText;
+          } catch {
+            // ignore
+          }
+        }
+        return {
+          success: false,
+          error: `写真保存に失敗しました (${errorDetail})`,
+        };
+      }
+
+      const resData = await response.json().catch(() => null);
+      if (resData && (resData.ok === false || resData.success === false)) {
+        return {
+          success: false,
+          error: resData.error || resData.message || resData.detail || '写真保存に失敗しました',
+        };
+      }
+
+      return {
+        success: true,
+        data: resData,
+      };
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : 'ネットワーク通信エラー';
+      return {
+        success: false,
+        error: `写真保存通信エラー: ${errMsg}`,
       };
     }
   }
