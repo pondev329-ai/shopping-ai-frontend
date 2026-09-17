@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   X,
   History,
@@ -8,32 +8,166 @@ import {
   ZoomIn,
   Clock,
   MessageSquare,
+  RefreshCw,
+  AlertCircle,
+  Cloud,
+  HardDrive,
 } from 'lucide-react';
 import { ChatMessage } from '../types/chat';
+import { ChatService } from '../services/chatService';
 
 interface ConversationReviewModalProps {
   isOpen: boolean;
   onClose: () => void;
+  sessionId: string;
   sessionTitle: string;
   sessionDate: string;
-  conversationRecord: ChatMessage[];
+  localConversationRecord: ChatMessage[];
+  chatService?: ChatService;
+  memoryConnectionId?: string | null;
   onPreviewImage: (url: string) => void;
 }
 
 export const ConversationReviewModal: React.FC<ConversationReviewModalProps> = ({
   isOpen,
   onClose,
+  sessionId,
   sessionTitle,
   sessionDate,
-  conversationRecord,
+  localConversationRecord,
+  chatService,
+  memoryConnectionId,
   onPreviewImage,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
+  // Drive取得管理用ステート
+  const [timelineMessages, setTimelineMessages] = useState<ChatMessage[] | null>(null);
+  const [isLoadingDrive, setIsLoadingDrive] = useState(false);
+  const [driveError, setDriveError] = useState<string | null>(null);
+  const [sourceType, setSourceType] = useState<'drive' | 'local'>('local');
+
+  // 有効なMemory接続IDの判定
+  const validMemoryConnectionId =
+    typeof memoryConnectionId === 'string' &&
+    memoryConnectionId.trim().length > 0 &&
+    memoryConnectionId.trim() !== 'null' &&
+    memoryConnectionId.trim() !== 'undefined'
+      ? memoryConnectionId.trim()
+      : null;
+
+  // モーダルが開かれたとき、Memory接続中なら Google Drive Conversation Record を取得
+  useEffect(() => {
+    if (!isOpen) {
+      // 閉じたときはリセット
+      setTimelineMessages(null);
+      setIsLoadingDrive(false);
+      setDriveError(null);
+      setSourceType('local');
+      setSearchQuery('');
+      return;
+    }
+
+    let isMounted = true;
+
+    // Memory未接続、またはgetConversationTimeline APIが利用できない場合はローカル履歴を使用
+    if (!validMemoryConnectionId || !chatService?.getConversationTimeline || !sessionId) {
+      setTimelineMessages(null);
+      setIsLoadingDrive(false);
+      setDriveError(null);
+      setSourceType('local');
+      return;
+    }
+
+    // Google DriveからConversation Recordを取得
+    const fetchTimeline = async () => {
+      setIsLoadingDrive(true);
+      setDriveError(null);
+      try {
+        const res = await chatService.getConversationTimeline!(
+          sessionId,
+          validMemoryConnectionId
+        );
+
+        if (!isMounted) return;
+
+        if (res.success && Array.isArray(res.messages) && res.messages.length > 0) {
+          // Drive側から有効なConversation Recordが取得できた場合
+          setTimelineMessages(res.messages);
+          setSourceType('drive');
+          setDriveError(null);
+        } else if (res.success && Array.isArray(res.messages) && res.messages.length === 0) {
+          // Drive上にまだレコードが作成されていない場合、ローカル履歴をフォールバック表示
+          setTimelineMessages(null);
+          setSourceType('local');
+          setDriveError(null);
+        } else {
+          // エラーまたは未取得時はローカル履歴へフォールバック
+          setTimelineMessages(null);
+          setSourceType('local');
+          if (res.error) {
+            setDriveError(res.error);
+          }
+        }
+      } catch (err) {
+        if (!isMounted) return;
+        const msg = err instanceof Error ? err.message : '通信エラー';
+        setTimelineMessages(null);
+        setSourceType('local');
+        setDriveError(msg);
+      } finally {
+        if (isMounted) {
+          setIsLoadingDrive(false);
+        }
+      }
+    };
+
+    fetchTimeline();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [isOpen, sessionId, validMemoryConnectionId, chatService]);
+
+  // 手動再取得ハンドラー
+  const handleRefreshDrive = async () => {
+    if (!validMemoryConnectionId || !chatService?.getConversationTimeline || !sessionId) {
+      return;
+    }
+    setIsLoadingDrive(true);
+    setDriveError(null);
+    try {
+      const res = await chatService.getConversationTimeline(
+        sessionId,
+        validMemoryConnectionId
+      );
+      if (res.success && Array.isArray(res.messages) && res.messages.length > 0) {
+        setTimelineMessages(res.messages);
+        setSourceType('drive');
+      } else {
+        setTimelineMessages(null);
+        setSourceType('local');
+        if (res.error) {
+          setDriveError(res.error);
+        }
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : '通信エラー';
+      setTimelineMessages(null);
+      setSourceType('local');
+      setDriveError(msg);
+    } finally {
+      setIsLoadingDrive(false);
+    }
+  };
+
   if (!isOpen) return null;
 
-  const filteredMessages = conversationRecord.filter((msg) => {
+  // 表示するメッセージ配列（Drive取得成功時はDriveのConversation Record、それ以外はローカル履歴）
+  const activeRecord = timelineMessages !== null ? timelineMessages : localConversationRecord;
+
+  const filteredMessages = activeRecord.filter((msg) => {
     if (!searchQuery.trim()) return true;
     return msg.content.toLowerCase().includes(searchQuery.toLowerCase().trim());
   });
@@ -57,32 +191,105 @@ export const ConversationReviewModal: React.FC<ConversationReviewModalProps> = (
       >
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-stone-200 dark:border-stone-800 bg-stone-50 dark:bg-stone-900/95 shrink-0">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-stone-800 dark:bg-stone-750 text-white flex items-center justify-center shadow-2xs">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-8 h-8 rounded-lg bg-stone-800 dark:bg-stone-750 text-white flex items-center justify-center shadow-2xs shrink-0">
               <History className="w-4 h-4" />
             </div>
-            <div>
+            <div className="min-w-0">
               <div className="flex items-center gap-2">
                 <h3 className="font-semibold text-stone-900 dark:text-stone-100 text-sm leading-tight truncate max-w-xs">
                   {sessionTitle}
                 </h3>
-                <span className="text-[10px] text-stone-500 dark:text-stone-400 bg-stone-200/70 dark:bg-stone-800 px-1.5 py-0.2 rounded font-mono">
+                <span className="text-[10px] text-stone-500 dark:text-stone-400 bg-stone-200/70 dark:bg-stone-800 px-1.5 py-0.2 rounded font-mono shrink-0">
                   {sessionDate}
                 </span>
               </div>
-              <p className="text-xs text-stone-500 dark:text-stone-400">過去の対話記録（全 {conversationRecord.length} ターン）</p>
+              <div className="flex items-center gap-2 mt-0.5">
+                <p className="text-xs text-stone-500 dark:text-stone-400">
+                  過去の対話記録（全 {activeRecord.length} ターン）
+                </p>
+                {/* 読み込み元インジケーター */}
+                {sourceType === 'drive' ? (
+                  <span
+                    id="badge-history-source-drive"
+                    className="inline-flex items-center gap-1 text-[10px] font-medium text-sky-700 dark:text-sky-300 bg-sky-50 dark:bg-sky-950/60 border border-sky-200 dark:border-sky-800/80 px-1.5 py-0.5 rounded-full"
+                    title="Google Drive Memoryから最新のConversation Recordを取得しました"
+                  >
+                    <Cloud className="w-2.5 h-2.5" />
+                    Drive
+                  </span>
+                ) : (
+                  <span
+                    id="badge-history-source-local"
+                    className="inline-flex items-center gap-1 text-[10px] font-medium text-stone-600 dark:text-stone-400 bg-stone-100 dark:bg-stone-800 px-1.5 py-0.5 rounded-full"
+                    title={
+                      validMemoryConnectionId
+                        ? 'Google Drive未作成または取得待機中のため、端末のローカル記録を表示しています'
+                        : 'Memory未接続のため端末のローカル記録を表示しています'
+                    }
+                  >
+                    <HardDrive className="w-2.5 h-2.5 text-stone-400 dark:text-stone-500" />
+                    端末
+                  </span>
+                )}
+              </div>
             </div>
           </div>
-          <button
-            type="button"
-            id="btn-close-conversation-review"
-            onClick={onClose}
-            className="p-1.5 text-stone-400 hover:text-stone-700 dark:text-stone-500 dark:hover:text-stone-200 rounded-full hover:bg-stone-200/60 dark:hover:bg-stone-800 transition-colors cursor-pointer"
-            aria-label="会話記録を閉じる"
-          >
-            <X className="w-5 h-5" />
-          </button>
+          <div className="flex items-center gap-1">
+            {/* Memory接続時の再取得ボタン */}
+            {validMemoryConnectionId && (
+              <button
+                type="button"
+                id="btn-refresh-conversation-history"
+                onClick={handleRefreshDrive}
+                disabled={isLoadingDrive}
+                className="p-1.5 text-stone-400 hover:text-stone-700 dark:text-stone-500 dark:hover:text-stone-200 rounded-full hover:bg-stone-200/60 dark:hover:bg-stone-800 transition-colors cursor-pointer disabled:opacity-50"
+                title="Google Driveから最新履歴を再取得"
+              >
+                <RefreshCw className={`w-4 h-4 ${isLoadingDrive ? 'animate-spin text-sky-600 dark:text-sky-400' : ''}`} />
+              </button>
+            )}
+            <button
+              type="button"
+              id="btn-close-conversation-review"
+              onClick={onClose}
+              className="p-1.5 text-stone-400 hover:text-stone-700 dark:text-stone-500 dark:hover:text-stone-200 rounded-full hover:bg-stone-200/60 dark:hover:bg-stone-800 transition-colors cursor-pointer"
+              aria-label="会話記録を閉じる"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
         </div>
+
+        {/* 通信エラーまたは同期状況のアナウンス */}
+        {driveError && (
+          <div
+            id="history-drive-fallback-alert"
+            className="px-4 py-2 bg-amber-50 dark:bg-amber-950/40 border-b border-amber-200 dark:border-amber-800/60 flex items-center justify-between text-xs text-amber-800 dark:text-amber-300"
+          >
+            <div className="flex items-center gap-1.5 min-w-0">
+              <AlertCircle className="w-3.5 h-3.5 shrink-0 text-amber-600 dark:text-amber-400" />
+              <span className="truncate">Drive記録の取得を試みましたが、端末のローカル記録で安全に表示しています</span>
+            </div>
+            {validMemoryConnectionId && (
+              <button
+                type="button"
+                onClick={handleRefreshDrive}
+                className="text-[11px] underline font-medium hover:text-amber-900 dark:hover:text-amber-200 ml-2 shrink-0 cursor-pointer"
+              >
+                再試行
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* 読み込み中プログレス */}
+        {isLoadingDrive && (
+          <div className="px-4 py-2 bg-sky-50 dark:bg-sky-950/40 border-b border-sky-100 dark:border-sky-900/60 flex items-center gap-2 text-xs text-sky-700 dark:text-sky-300">
+            <RefreshCw className="w-3.5 h-3.5 animate-spin text-sky-600 dark:text-sky-400 shrink-0" />
+            <span>Google Drive Memory から最新のConversation Recordを取得中...</span>
+          </div>
+        )}
 
         {/* Search Bar */}
         <div className="p-3 border-b border-stone-100 dark:border-stone-800 bg-white dark:bg-stone-900 shrink-0">
@@ -128,7 +335,7 @@ export const ConversationReviewModal: React.FC<ConversationReviewModalProps> = (
               >
                 <div className="flex items-center justify-between text-[11px] text-stone-400 dark:text-stone-500 border-b border-stone-100 dark:border-stone-700/60 pb-1.5">
                   <span className="font-semibold text-stone-600 dark:text-stone-300">
-                    {msg.role === 'user' ? 'あなた' : 'Shopping AI'}
+                    {msg.role === 'user' ? 'あなた' : 'ポコ太'}
                   </span>
                   <div className="flex items-center gap-2">
                     <span className="inline-flex items-center gap-0.5 text-[10px]">

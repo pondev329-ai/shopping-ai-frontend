@@ -6,6 +6,9 @@ import {
   DeleteMemoryRomParams,
   DeleteMemoryRomResult,
   classifyMemoryRomType,
+  GetConversationTimelineParams,
+  GetConversationTimelineResult,
+  MemoryTimelineRecord,
 } from '../types/memory';
 
 /**
@@ -26,6 +29,7 @@ export interface ChatService {
   disconnectMemory?(): Promise<void>;
   deleteMemorySession?(sessionId: string, connectionId?: string): Promise<{ success: boolean; error?: string }>;
   getMemorySession?(sessionId: string, connectionId?: string): Promise<{ success: boolean; state?: Record<string, unknown> | null; error?: string }>;
+  getConversationTimeline?(sessionId: string, connectionId?: string): Promise<GetConversationTimelineResult>;
   listMemoryRom?(params?: ListMemoryRomParams): Promise<ListMemoryRomResult>;
   deleteMemoryRomItem?(params: DeleteMemoryRomParams): Promise<DeleteMemoryRomResult>;
   onMemoryConnectionChange?(callback: (id: string | null) => void): () => void;
@@ -459,6 +463,217 @@ export class RenderBackendChatAdapter implements ChatService {
       return {
         success: false,
         error: `通信エラー: ${errMsg}`,
+      };
+    }
+  }
+
+  /**
+   * Google Drive Memory上のConversation Record（対話記録ログ）を取得します。
+   * Flow: Frontend -> Render /memory/timeline/get -> Memory Runner -> Memory Flow get_timeline -> Google Drive
+   * 
+   * 送信ペイロード:
+   * {
+   *   "memory_connection_id": "<現在接続中のGoogle Drive connection id>",
+   *   "session_id": "<対象セッションID>"
+   * }
+   * 
+   * 取得したConversation Recordの各レコード（role, content, occurred_at, event_id 等）を
+   * フロントエンドのChatMessage形式に正規化して返却します。
+   */
+  async getConversationTimeline(
+    sessionId: string,
+    connectionId?: string
+  ): Promise<GetConversationTimelineResult> {
+    const activeConnectionId = (connectionId ?? this.memoryConnectionId)?.trim();
+    if (!activeConnectionId || activeConnectionId === 'null' || activeConnectionId === 'undefined') {
+      return {
+        success: false,
+        records: [],
+        messages: [],
+        error: 'Memory未接続です',
+        fromDrive: false,
+      };
+    }
+
+    const timelineUrl = `${this.baseUrl}/memory/timeline/get`;
+    const payload = {
+      memory_connection_id: activeConnectionId,
+      session_id: sessionId,
+    };
+
+    try {
+      const response = await fetch(timelineUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        let errorDetail = `HTTP ${response.status}`;
+        try {
+          const errData = await response.json();
+          if (errData.detail || errData.error || errData.message) {
+            errorDetail = errData.detail || errData.error || errData.message;
+          }
+        } catch {
+          try {
+            const errText = await response.text();
+            if (errText) errorDetail = errText;
+          } catch {
+            // ignore
+          }
+        }
+        return {
+          success: false,
+          records: [],
+          messages: [],
+          error: `Conversation Record取得に失敗しました (${errorDetail})`,
+          fromDrive: false,
+        };
+      }
+
+      const resData = await response.json().catch(() => null);
+      if (!resData) {
+        return {
+          success: false,
+          records: [],
+          messages: [],
+          error: '有効なレスポンスを受信できませんでした',
+          fromDrive: false,
+        };
+      }
+
+      if (resData.ok === false || resData.success === false) {
+        return {
+          success: false,
+          records: [],
+          messages: [],
+          error: resData.error || resData.message || resData.detail || 'Conversation Record取得に失敗しました',
+          fromDrive: false,
+        };
+      }
+
+      // レコード一覧の抽出（timeline, records, items, events, messages 等のキーに対応）
+      let rawList: unknown[] = [];
+      if (Array.isArray(resData)) {
+        rawList = resData;
+      } else if (Array.isArray(resData.timeline)) {
+        rawList = resData.timeline;
+      } else if (Array.isArray(resData.records)) {
+        rawList = resData.records;
+      } else if (Array.isArray(resData.items)) {
+        rawList = resData.items;
+      } else if (Array.isArray(resData.events)) {
+        rawList = resData.events;
+      } else if (Array.isArray(resData.messages)) {
+        rawList = resData.messages;
+      } else if (resData.result && typeof resData.result === 'object') {
+        const r = resData.result as Record<string, unknown>;
+        if (Array.isArray(r)) {
+          rawList = r;
+        } else if (Array.isArray(r.timeline)) {
+          rawList = r.timeline;
+        } else if (Array.isArray(r.records)) {
+          rawList = r.records;
+        } else if (Array.isArray(r.items)) {
+          rawList = r.items;
+        } else if (Array.isArray(r.events)) {
+          rawList = r.events;
+        } else if (Array.isArray(r.messages)) {
+          rawList = r.messages;
+        }
+      } else if (Array.isArray(resData.data)) {
+        rawList = resData.data;
+      }
+
+      const records: MemoryTimelineRecord[] = [];
+      const messages: ChatMessage[] = [];
+
+      for (let i = 0; i < rawList.length; i++) {
+        const item = rawList[i];
+        if (!item || typeof item !== 'object') continue;
+
+        const raw = item as Record<string, unknown>;
+
+        // session_idの整合性確認（指定session_idと異なるレコードが混在している場合はスキップ）
+        const itemSessionId = raw.session_id || raw.sessionId;
+        if (itemSessionId && String(itemSessionId) !== String(sessionId)) {
+          continue;
+        }
+
+        // roleの正規化: user, assistant, system
+        const rawRole = String(raw.role || raw.speaker || raw.author || raw.sender || 'assistant').toLowerCase();
+        const role = rawRole.includes('user') ? 'user' : rawRole.includes('system') ? 'system' : 'assistant';
+
+        // contentの抽出
+        let content = '';
+        if (typeof raw.content === 'string') {
+          content = raw.content;
+        } else if (typeof raw.message === 'string') {
+          content = raw.message;
+        } else if (typeof raw.text === 'string') {
+          content = raw.text;
+        } else if (raw.content && typeof raw.content === 'object') {
+          content = JSON.stringify(raw.content);
+        }
+
+        // event_idの抽出
+        const eventId = String(raw.event_id || raw.eventId || raw.id || `drive_msg_${sessionId}_${i}`);
+
+        // occurred_at / timestampのパース
+        let timestamp = Date.now();
+        const rawOccurred = raw.occurred_at || raw.occurredAt || raw.timestamp || raw.created_at || raw.createdAt;
+        if (typeof rawOccurred === 'number') {
+          timestamp = rawOccurred > 1e12 ? rawOccurred : rawOccurred * 1000;
+        } else if (typeof rawOccurred === 'string' && rawOccurred.trim()) {
+          const parsed = Date.parse(rawOccurred);
+          if (!isNaN(parsed)) {
+            timestamp = parsed;
+          }
+        }
+
+        const imageUrl = typeof raw.image_url === 'string' ? raw.image_url : typeof raw.imageUrl === 'string' ? raw.imageUrl : undefined;
+
+        const timelineRecord: MemoryTimelineRecord = {
+          event_id: eventId,
+          role,
+          content,
+          occurred_at: rawOccurred as string | number | undefined,
+          session_id: sessionId,
+          image_url: imageUrl,
+          metadata: raw,
+        };
+        records.push(timelineRecord);
+
+        const chatMessage: ChatMessage = {
+          id: eventId,
+          role,
+          content,
+          timestamp,
+          imageUrl,
+        };
+        messages.push(chatMessage);
+      }
+
+      // 時系列順（occurred_at / timestamp の昇順）でソートし、user -> assistant の対話順序を確実に保持
+      messages.sort((a, b) => a.timestamp - b.timestamp);
+
+      return {
+        success: true,
+        records,
+        messages,
+        fromDrive: true,
+      };
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : 'ネットワーク通信エラー';
+      return {
+        success: false,
+        records: [],
+        messages: [],
+        error: `通信エラー: ${errMsg}`,
+        fromDrive: false,
       };
     }
   }

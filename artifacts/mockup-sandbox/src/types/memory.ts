@@ -1,3 +1,5 @@
+import { ChatMessage } from './chat';
+
 /**
  * Google Drive Memory ROM のデータ型および分類定義
  * 
@@ -217,4 +219,34 @@ export function classifyMemoryRomType(
 
   // 5. 不明・未分類
   return 'unknown';
+}
+
+/**
+ * Google Drive Memory上のConversation Recordレコード定義
+ * (Render POST /memory/timeline/get の返却データ)
+ */
+export interface MemoryTimelineRecord {
+  event_id?: string;
+  role?: string;
+  content?: string;
+  occurred_at?: string | number;
+  session_id?: string;
+  memory_type?: string;
+  image_url?: string;
+  imageUrl?: string;
+  metadata?: Record<string, unknown>;
+  [key: string]: unknown;
+}
+
+export interface GetConversationTimelineParams {
+  sessionId: string;
+  connectionId?: string;
+}
+
+export interface GetConversationTimelineResult {
+  success: boolean;
+  records: MemoryTimelineRecord[];
+  messages: ChatMessage[];
+  error?: string;
+  fromDrive?: boolean;
 }

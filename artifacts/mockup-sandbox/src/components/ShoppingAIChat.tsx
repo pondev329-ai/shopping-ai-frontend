@@ -1120,9 +1120,12 @@ export const ShoppingAIChat: React.FC<ShoppingAIChatProps> = ({
       <ConversationReviewModal
         isOpen={showConversationReview}
         onClose={() => setShowConversationReview(false)}
+        sessionId={activeSession.id}
         sessionTitle={activeSession.title}
         sessionDate={activeSession.date}
-        conversationRecord={conversationRecord}
+        localConversationRecord={conversationRecord}
+        chatService={chatService}
+        memoryConnectionId={memoryConnectionId}
         onPreviewImage={(url) => setPreviewModalImage(url)}
       />
 
