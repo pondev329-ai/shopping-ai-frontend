@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 
 export type ThemeMode = 'light' | 'dark' | 'system';
+export type FontSize = 'small' | 'standard' | 'large' | 'extra_large';
 
 export function useTheme() {
   const [theme, setThemeState] = useState<ThemeMode>(() => {
@@ -13,6 +14,18 @@ export function useTheme() {
       // LocalStorage might be restricted
     }
     return 'system';
+  });
+
+  const [fontSize, setFontSizeState] = useState<FontSize>(() => {
+    try {
+      const saved = localStorage.getItem('shopping_ai_font_size');
+      if (saved === 'small' || saved === 'standard' || saved === 'large' || saved === 'extra_large') {
+        return saved;
+      }
+    } catch {
+      // ignore
+    }
+    return 'standard';
   });
 
   const [resolvedTheme, setResolvedTheme] = useState<'light' | 'dark'>(() => {
@@ -66,10 +79,26 @@ export function useTheme() {
     return () => mediaQuery.removeEventListener('change', handleMediaChange);
   }, [theme]);
 
+  // フォントサイズのHTMLルート適用
+  useEffect(() => {
+    const root = document.documentElement;
+    root.classList.remove('text-size-small', 'text-size-standard', 'text-size-large', 'text-size-extra-large');
+    root.classList.add(`text-size-${fontSize.replace('_', '-')}`);
+  }, [fontSize]);
+
   const setTheme = (newTheme: ThemeMode) => {
     setThemeState(newTheme);
     try {
       localStorage.setItem('shopping_ai_theme', newTheme);
+    } catch {
+      // ignore
+    }
+  };
+
+  const setFontSize = (newSize: FontSize) => {
+    setFontSizeState(newSize);
+    try {
+      localStorage.setItem('shopping_ai_font_size', newSize);
     } catch {
       // ignore
     }
@@ -80,5 +109,7 @@ export function useTheme() {
     resolvedTheme,
     isDark: resolvedTheme === 'dark',
     setTheme,
+    fontSize,
+    setFontSize,
   };
 }

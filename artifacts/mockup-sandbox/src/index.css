@@ -182,4 +182,18 @@
     color: hsl(var(--muted-foreground));
     pointer-events: none;
   }
+
+  /* フォントサイズ階層制御 */
+  html.text-size-small {
+    font-size: 14px;
+  }
+  html.text-size-standard {
+    font-size: 16px;
+  }
+  html.text-size-large {
+    font-size: 18px;
+  }
+  html.text-size-extra-large {
+    font-size: 20px;
+  }
 }

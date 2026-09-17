@@ -25,6 +25,7 @@ export interface ChatService {
   setMemoryConnectionId?(id: string | null): void;
   disconnectMemory?(): Promise<void>;
   deleteMemorySession?(sessionId: string, connectionId?: string): Promise<{ success: boolean; error?: string }>;
+  getMemorySession?(sessionId: string, connectionId?: string): Promise<{ success: boolean; state?: Record<string, unknown> | null; error?: string }>;
   listMemoryRom?(params?: ListMemoryRomParams): Promise<ListMemoryRomResult>;
   deleteMemoryRomItem?(params: DeleteMemoryRomParams): Promise<DeleteMemoryRomResult>;
   onMemoryConnectionChange?(callback: (id: string | null) => void): () => void;
@@ -364,6 +365,95 @@ export class RenderBackendChatAdapter implements ChatService {
       }
 
       return { success: true };
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : 'ネットワーク通信エラー';
+      return {
+        success: false,
+        error: `通信エラー: ${errMsg}`,
+      };
+    }
+  }
+
+  /**
+   * Google Drive Memory上のSession ROM（復元用コンテキスト状態）を取得します。
+   * Flow: Frontend -> Render /memory/session/get -> Memory Runner -> Memory Flow get_session -> Google Drive
+   * 
+   * 送信ペイロード:
+   * {
+   *   "memory_connection_id": "<現在接続中のGoogle Drive connection id>",
+   *   "session_id": "<復元対象のsession id>"
+   * }
+   * 
+   * 戻り値:
+   * 復元に必要なバックエンドState（possibility_context, session_context, shopping_context 等）
+   */
+  async getMemorySession(sessionId: string, connectionId?: string): Promise<{ success: boolean; state?: Record<string, unknown> | null; error?: string }> {
+    const activeConnectionId = (connectionId ?? this.memoryConnectionId)?.trim();
+    if (!activeConnectionId || activeConnectionId === 'null' || activeConnectionId === 'undefined') {
+      return { success: false, error: 'Memory未接続です' };
+    }
+    const getUrl = `${this.baseUrl}/memory/session/get`;
+    const payload = {
+      memory_connection_id: activeConnectionId,
+      session_id: sessionId,
+    };
+
+    try {
+      const response = await fetch(getUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        let errorDetail = `HTTP ${response.status}`;
+        try {
+          const errData = await response.json();
+          if (errData.detail || errData.error || errData.message) {
+            errorDetail = errData.detail || errData.error || errData.message;
+          }
+        } catch {
+          try {
+            const errText = await response.text();
+            if (errText) errorDetail = errText;
+          } catch {
+            // ignore
+          }
+        }
+        return {
+          success: false,
+          error: `Session ROM取得に失敗しました (${errorDetail})`,
+        };
+      }
+
+      const resData = await response.json().catch(() => null);
+      if (!resData) {
+        return { success: false, error: '有効なレスポンスを受信できませんでした' };
+      }
+
+      if (resData.ok === false || resData.success === false) {
+        return {
+          success: false,
+          error: resData.error || resData.message || resData.detail || 'Session ROM取得に失敗しました',
+        };
+      }
+
+      // レスポンスからセッション復元用stateを抽出
+      // 形式の柔軟なサポート: resData.state, resData.result.state, resData.session_rom.state, resData.session_state 等
+      const extractedState =
+        resData.state ||
+        resData.result?.state ||
+        resData.session_rom?.state ||
+        resData.session_rom ||
+        resData.session_state ||
+        (resData.possibility_context || resData.session_context || resData.shopping_context ? resData : null);
+
+      return {
+        success: true,
+        state: extractedState && typeof extractedState === 'object' ? (extractedState as Record<string, unknown>) : null,
+      };
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : 'ネットワーク通信エラー';
       return {

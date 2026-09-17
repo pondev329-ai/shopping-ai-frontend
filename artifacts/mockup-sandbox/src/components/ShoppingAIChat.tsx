@@ -27,6 +27,8 @@ import {
   Monitor,
   ChevronDown,
   ChevronUp,
+  Settings,
+  Type,
 } from 'lucide-react';
 import { ChatMessage, SuggestionOption } from '../types/chat';
 import { ShoppingSession } from '../types/session';
@@ -45,6 +47,7 @@ import { StatusDetailModal } from './StatusDetailModal';
 import { SessionDrawer } from './SessionDrawer';
 import { ConversationReviewModal } from './ConversationReviewModal';
 import { MemoryRomModal } from './MemoryRomModal';
+import { SettingsModal } from './SettingsModal';
 
 interface ShoppingAIChatProps {
   chatService?: ChatService;
@@ -72,11 +75,12 @@ export const ShoppingAIChat: React.FC<ShoppingAIChatProps> = ({
   const conversationRecord = activeSession.conversationRecord;
 
   // 3. UI表示制御
-  const { theme, setTheme } = useTheme();
+  const { theme, setTheme, fontSize, setFontSize } = useTheme();
   const [showSessionDrawer, setShowSessionDrawer] = useState(false);
   const [showConversationReview, setShowConversationReview] = useState(false);
   const [showMemoryRomModal, setShowMemoryRomModal] = useState(false);
   const [showStatusDetailModal, setShowStatusDetailModal] = useState(false);
+  const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [showAppMenu, setShowAppMenu] = useState(false);
   const [isStatusExpanded, setIsStatusExpanded] = useState(false);
   // 返信候補（クイックリプライ）の開閉状態（メッセージIDごとの展開フラグ）
@@ -122,6 +126,56 @@ export const ShoppingAIChat: React.FC<ShoppingAIChatProps> = ({
     }
   }, [chatService]);
 
+  // Memory接続時に、現在アクティブなセッションのDrive側Session ROMを照会してrestoreStateを同期
+  useEffect(() => {
+    const rawMemoryId =
+      memoryConnectionId ||
+      (chatService.getMemoryConnectionId ? chatService.getMemoryConnectionId() : null);
+    const validMemoryConnectionId =
+      typeof rawMemoryId === 'string' &&
+      rawMemoryId.trim().length > 0 &&
+      rawMemoryId.trim() !== 'null' &&
+      rawMemoryId.trim() !== 'undefined'
+        ? rawMemoryId.trim()
+        : null;
+
+    if (!validMemoryConnectionId || !chatService.getMemorySession || !activeSessionId) {
+      return;
+    }
+
+    let isMounted = true;
+    (async () => {
+      try {
+        const res = await chatService.getMemorySession!(activeSessionId, validMemoryConnectionId);
+        if (isMounted && res.success && res.state) {
+          if (chatService.setBackendState) {
+            chatService.setBackendState(res.state);
+          }
+          const updatedSummary = extractStatusSummary(res.state);
+          setSessionStore((prev) => ({
+            ...prev,
+            sessions: prev.sessions.map((s) =>
+              s.id === activeSessionId
+                ? {
+                    ...s,
+                    restoreState: res.state || s.restoreState,
+                    statusSummary: updatedSummary,
+                    updatedAt: Date.now(),
+                  }
+                : s
+            ),
+          }));
+        }
+      } catch {
+        // Driveからの取得に失敗した場合はlocalStorageの状態をそのまま利用
+      }
+    })();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [memoryConnectionId, activeSessionId, chatService]);
+
   // セッション変更時の永続化（クライアント側キャッシュ保存）
   useEffect(() => {
     saveAllSessions(sessions, activeSessionId);
@@ -161,11 +215,13 @@ export const ShoppingAIChat: React.FC<ShoppingAIChatProps> = ({
   };
 
   // セッション切り替え（再開）
-  const handleSelectSession = (sessionId: string) => {
+  // Memory接続時はGoogle Drive側の最新Session ROMを取得してrestoreStateを再構築
+  // 未接続時またはDrive未作成・取得失敗時は既存localStorage側のrestoreStateを利用して通常通り動作
+  const handleSelectSession = async (sessionId: string) => {
     const target = sessions.find((s) => s.id === sessionId);
     if (!target) return;
 
-    // Session Restore State をChatServiceに復元
+    // 1. まずローカルのrestoreStateをChatServiceにセットし、即時切り替え
     if (chatService.setBackendState) {
       chatService.setBackendState(target.restoreState);
     }
@@ -176,6 +232,47 @@ export const ShoppingAIChat: React.FC<ShoppingAIChatProps> = ({
     }));
     setSelectedImage(null);
     setInput('');
+
+    // 2. Google Drive Memory 接続中の場合、Render Backend /memory/session/get から最新Session ROMを取得
+    const rawMemoryId =
+      memoryConnectionId ||
+      (chatService.getMemoryConnectionId ? chatService.getMemoryConnectionId() : null);
+    const validMemoryConnectionId =
+      typeof rawMemoryId === 'string' &&
+      rawMemoryId.trim().length > 0 &&
+      rawMemoryId.trim() !== 'null' &&
+      rawMemoryId.trim() !== 'undefined'
+        ? rawMemoryId.trim()
+        : null;
+
+    if (validMemoryConnectionId && chatService.getMemorySession) {
+      try {
+        const res = await chatService.getMemorySession(sessionId, validMemoryConnectionId);
+        if (res.success && res.state) {
+          // Google Driveから取得したSession ROMでChatServiceのバックエンドStateを更新
+          if (chatService.setBackendState) {
+            chatService.setBackendState(res.state);
+          }
+          // セッション復元情報 (restoreState) とステータスサマリーを同期更新
+          const updatedSummary = extractStatusSummary(res.state);
+          setSessionStore((prev) => ({
+            ...prev,
+            sessions: prev.sessions.map((s) =>
+              s.id === sessionId
+                ? {
+                    ...s,
+                    restoreState: res.state || s.restoreState,
+                    statusSummary: updatedSummary,
+                    updatedAt: Date.now(),
+                  }
+                : s
+            ),
+          }));
+        }
+      } catch {
+        // 通信エラーやDrive上にROMがない場合は既存localStorage側の状態のまま通常動作を継続
+      }
+    }
   };
 
   // セッション削除（Google Drive Memory接続時はROMデータも連動削除、未接続時はFrontendのみ正常削除）
@@ -1298,7 +1395,17 @@ export const ShoppingAIChat: React.FC<ShoppingAIChatProps> = ({
         onOpenConnectModal={() => setShowMemoryModal(true)}
       />
 
-      {/* 12. アプリ共通メニュー (App Menu Drawer) */}
+      {/* 12. 設定モーダル（ダークモード切り替え・文字サイズ調整） */}
+      <SettingsModal
+        isOpen={showSettingsModal}
+        onClose={() => setShowSettingsModal(false)}
+        theme={theme}
+        onThemeChange={setTheme}
+        fontSize={fontSize}
+        onFontSizeChange={setFontSize}
+      />
+
+      {/* 13. アプリ共通メニュー (App Menu Drawer) */}
       {showAppMenu && (
         <div
           id="menu-drawer-backdrop"
@@ -1330,61 +1437,6 @@ export const ShoppingAIChat: React.FC<ShoppingAIChatProps> = ({
             </div>
 
             <div className="p-4 overflow-y-auto space-y-4 flex-1">
-              {/* テーマ切替セレクター */}
-              <div className="p-3 bg-stone-50 dark:bg-stone-800/70 rounded-2xl border border-stone-200 dark:border-stone-700/80 space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-[11px] font-bold text-stone-500 dark:text-stone-400 uppercase tracking-wider">
-                    外観モード (テーマ)
-                  </span>
-                  <span className="text-[11px] text-stone-400 dark:text-stone-400">
-                    {theme === 'system' ? '端末設定連動' : theme === 'dark' ? 'ダーク' : 'ライト'}
-                  </span>
-                </div>
-                <div className="grid grid-cols-3 gap-1.5 p-1 bg-stone-200/60 dark:bg-stone-900/80 rounded-xl">
-                  <button
-                    type="button"
-                    id="btn-theme-light"
-                    onClick={() => setTheme('light')}
-                    className={`flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-                      theme === 'light'
-                        ? 'bg-white dark:bg-stone-800 text-stone-900 dark:text-stone-100 shadow-2xs'
-                        : 'text-stone-600 dark:text-stone-400 hover:text-stone-900 dark:hover:text-stone-200'
-                    }`}
-                  >
-                    <Sun className="w-3.5 h-3.5 text-amber-500" />
-                    <span>ライト</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    id="btn-theme-dark"
-                    onClick={() => setTheme('dark')}
-                    className={`flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-                      theme === 'dark'
-                        ? 'bg-white dark:bg-stone-800 text-stone-900 dark:text-stone-100 shadow-2xs'
-                        : 'text-stone-600 dark:text-stone-400 hover:text-stone-900 dark:hover:text-stone-200'
-                    }`}
-                  >
-                    <Moon className="w-3.5 h-3.5 text-indigo-400" />
-                    <span>ダーク</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    id="btn-theme-system"
-                    onClick={() => setTheme('system')}
-                    className={`flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-                      theme === 'system'
-                        ? 'bg-white dark:bg-stone-800 text-stone-900 dark:text-stone-100 shadow-2xs'
-                        : 'text-stone-600 dark:text-stone-400 hover:text-stone-900 dark:hover:text-stone-200'
-                    }`}
-                  >
-                    <Monitor className="w-3.5 h-3.5 text-emerald-500" />
-                    <span>端末連動</span>
-                  </button>
-                </div>
-              </div>
-
               {/* 現在のセッションカード */}
               <div className="p-3 bg-stone-50 dark:bg-stone-800/70 rounded-2xl border border-stone-200 dark:border-stone-700/80 space-y-2">
                 <div className="flex items-center justify-between gap-2">
@@ -1539,6 +1591,32 @@ export const ShoppingAIChat: React.FC<ShoppingAIChatProps> = ({
                       {memoryConnectionId
                         ? '接続状態の確認・切断'
                         : 'Google Driveと連携して長期記憶を有効化'}
+                    </p>
+                  </div>
+                </button>
+
+                {/* 6. 設定（ダークモード切り替え・文字サイズ） */}
+                <button
+                  type="button"
+                  id="menu-item-settings"
+                  onClick={() => {
+                    setShowAppMenu(false);
+                    setShowSettingsModal(true);
+                  }}
+                  className="w-full flex items-center gap-3 p-3 rounded-xl hover:bg-stone-100 dark:hover:bg-stone-800 active:bg-stone-200 dark:active:bg-stone-700 transition-colors text-left cursor-pointer group border border-transparent hover:border-stone-200 dark:hover:border-stone-700"
+                >
+                  <div className="w-9 h-9 rounded-xl bg-stone-100 dark:bg-stone-800 group-hover:bg-purple-100 dark:group-hover:bg-purple-950/80 text-stone-600 dark:text-stone-300 group-hover:text-purple-700 dark:group-hover:text-purple-300 flex items-center justify-center shrink-0 transition-colors">
+                    <Settings className="w-4 h-4" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-stone-900 dark:text-stone-100">設定</span>
+                      <span className="text-[10px] text-stone-500 dark:text-stone-400 bg-stone-100 dark:bg-stone-800 px-2 py-0.5 rounded-full">
+                        {theme === 'dark' ? 'ダーク' : theme === 'light' ? 'ライト' : '自動'} / {fontSize === 'small' ? '小' : fontSize === 'standard' ? '標準' : fontSize === 'large' ? '大' : '特大'}
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-stone-500 dark:text-stone-400 truncate mt-0.5">
+                      ダークモード・文字の大きさ調整
                     </p>
                   </div>
                 </button>
