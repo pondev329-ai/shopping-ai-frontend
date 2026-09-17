@@ -576,7 +576,6 @@ export const CompanionSceneStage: React.FC<CompanionSceneStageProps> = ({
         {/* ポコ太のネームプレート（世界の中にいるキャラクターの証） */}
         <div className="mt-1 px-2.5 py-0.5 rounded-full bg-white/90 dark:bg-stone-900/90 backdrop-blur-xs border border-stone-200/90 dark:border-stone-700 shadow-2xs text-[11px] font-bold text-stone-800 dark:text-stone-100 flex items-center gap-1">
           <span>ポコ太</span>
-          <span className="text-[9.5px] font-normal text-stone-500 dark:text-stone-400">({sceneConfig.characterRole})</span>
         </div>
       </div>
 

@@ -643,7 +643,7 @@ export const ShoppingAIChat: React.FC<ShoppingAIChatProps> = ({
               />
               <HardDrive className="w-3 h-3 shrink-0 text-stone-600 dark:text-stone-300" />
               <span className="text-[10.5px]">
-                {memoryConnectionId ? 'Drive 接続中' : 'Drive 未接続'}
+                {memoryConnectionId ? '接続中' : '未接続'}
               </span>
             </button>
           </div>
@@ -658,7 +658,7 @@ export const ShoppingAIChat: React.FC<ShoppingAIChatProps> = ({
               title="対話履歴を全件確認"
             >
               <History className="w-3.5 h-3.5 text-stone-500 dark:text-stone-400" />
-              <span>会話履歴</span>
+              <span>履歴</span>
               {conversationRecord.length > 0 && (
                 <span className="text-[10px] text-stone-400 dark:text-stone-500 font-mono">
                   ({conversationRecord.length})
@@ -731,7 +731,7 @@ export const ShoppingAIChat: React.FC<ShoppingAIChatProps> = ({
                     ポ
                   </div>
                   <span className="text-xs font-bold text-stone-800 dark:text-stone-200">
-                    Shopping AI（ポコ太）
+                    ポコ太
                   </span>
                   {activeSession.expertMode && (
                     <span className="text-[10px] bg-purple-100 dark:bg-purple-950/80 text-purple-800 dark:text-purple-300 px-1.5 py-0.2 rounded font-semibold border border-purple-200 dark:border-purple-800">
@@ -749,22 +749,6 @@ export const ShoppingAIChat: React.FC<ShoppingAIChatProps> = ({
                     : 'bg-white dark:bg-stone-800 text-stone-800 dark:text-stone-100 border border-stone-200 dark:border-stone-700 rounded-tl-xs shadow-2xs group'
                 }`}
               >
-                {msg.role === 'assistant' && (
-                  <button
-                    type="button"
-                    id={`btn-balloon-copy-${msg.id}`}
-                    onClick={() => handleCopyMessage(msg.id, msg.content)}
-                    className="absolute top-2 right-2 p-1.5 rounded-lg bg-stone-50 dark:bg-stone-700/80 hover:bg-emerald-50 dark:hover:bg-emerald-950/80 text-stone-400 dark:text-stone-300 hover:text-emerald-700 dark:hover:text-emerald-300 border border-stone-200 dark:border-stone-600 transition-colors cursor-pointer shadow-2xs"
-                    title="ワンタップで返信をコピー"
-                    aria-label="返信をコピー"
-                  >
-                    {copiedMessageId === msg.id ? (
-                      <Check className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
-                    ) : (
-                      <Copy className="w-3.5 h-3.5" />
-                    )}
-                  </button>
-                )}
                 {msg.imageUrl && (
                   <div className="mb-2.5 overflow-hidden rounded-xl bg-black/15">
                     <img
@@ -858,79 +842,86 @@ export const ShoppingAIChat: React.FC<ShoppingAIChatProps> = ({
                       </div>
                     </div>
                   )}
-
-                  {/* クイックリプライボタン（常時表示せず、開くボタンで必要なときだけ表示） */}
-                  {msg.decisionData.quickReplies && msg.decisionData.quickReplies.length > 0 && (
-                    <div className="pt-0.5">
-                      <button
-                        type="button"
-                        id={`btn-toggle-quick-replies-${msg.id}`}
-                        onClick={() => toggleQuickReplies(msg.id)}
-                        className="inline-flex items-center gap-1 text-[11px] font-medium text-stone-500 hover:text-emerald-700 dark:text-stone-400 dark:hover:text-emerald-400 bg-stone-100/90 dark:bg-stone-800/90 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 border border-stone-200 dark:border-stone-700 rounded-full px-2.5 py-1 transition-all cursor-pointer shadow-2xs"
-                      >
-                        <Sparkles className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
-                        <span>返信の候補 ({msg.decisionData.quickReplies.length}件)</span>
-                        {expandedQuickReplies[msg.id] ? (
-                          <ChevronUp className="w-3 h-3 ml-0.5 text-stone-400" />
-                        ) : (
-                          <ChevronDown className="w-3 h-3 ml-0.5 text-stone-400" />
-                        )}
-                      </button>
-
-                      {expandedQuickReplies[msg.id] && (
-                        <div className="mt-2 pl-0.5 flex flex-wrap gap-1.5 animate-in fade-in slide-in-from-top-1 duration-150">
-                          {msg.decisionData.quickReplies.map((reply, i) => (
-                            <button
-                              key={i}
-                              id={`btn-quick-reply-${i}`}
-                              onClick={() => handleSend(reply)}
-                              className="text-xs bg-white dark:bg-stone-800 active:bg-stone-100 dark:active:bg-stone-700 text-stone-700 dark:text-stone-200 border border-stone-300 dark:border-stone-600 hover:border-emerald-600 dark:hover:border-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300 px-3 py-1.5 rounded-full transition-colors shadow-2xs cursor-pointer font-normal"
-                            >
-                              {reply}
-                            </button>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  )}
                 </div>
               )}
 
-            {/* メッセージフッター（時刻 & ワンタップコピーボタン） */}
+            {/* メッセージフッター（回答欄下側：左側にコピー、その横に返信候補ボタン、右側に時刻） */}
             <div
-              className={`flex items-center gap-2 mt-1.5 px-1 text-[11px] text-stone-400 dark:text-stone-500 ${
-                msg.role === 'user' ? 'justify-end' : 'justify-start'
+              className={`flex items-center gap-2 mt-1.5 px-1 text-[11px] text-stone-400 dark:text-stone-500 w-full sm:max-w-[92%] ${
+                msg.role === 'user' ? 'justify-end' : 'justify-between'
               }`}
             >
-              <button
-                type="button"
-                id={`btn-copy-msg-${msg.id}`}
-                onClick={() => handleCopyMessage(msg.id, msg.content)}
-                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full transition-all cursor-pointer active:scale-95 border text-xs shadow-2xs ${
-                  copiedMessageId === msg.id
-                    ? 'bg-emerald-50 dark:bg-emerald-950/80 text-emerald-700 dark:text-emerald-300 border-emerald-300 dark:border-emerald-700 font-medium'
-                    : 'bg-white dark:bg-stone-800 text-stone-600 dark:text-stone-300 hover:text-stone-900 dark:hover:text-stone-100 hover:bg-stone-100 dark:hover:bg-stone-700 border-stone-200 dark:border-stone-700'
-                }`}
-                title="メッセージ内容をワンタップでコピー"
-                aria-label="返信内容をコピー"
-              >
-                {copiedMessageId === msg.id ? (
-                  <>
-                    <Check className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
-                    <span className="text-[10.5px]">コピー完了</span>
-                  </>
-                ) : (
-                  <>
-                    <Copy className="w-3.5 h-3.5 text-stone-400 dark:text-stone-500" />
-                    <span className="text-[10.5px]">コピー</span>
-                  </>
-                )}
-              </button>
+              {msg.role === 'assistant' ? (
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  {/* コピーボタン（回答欄の左下に常に固定） */}
+                  <button
+                    type="button"
+                    id={`btn-copy-msg-${msg.id}`}
+                    onClick={() => handleCopyMessage(msg.id, msg.content)}
+                    className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full transition-all cursor-pointer active:scale-95 border text-xs shadow-2xs shrink-0 ${
+                      copiedMessageId === msg.id
+                        ? 'bg-emerald-50 dark:bg-emerald-950/80 text-emerald-700 dark:text-emerald-300 border-emerald-300 dark:border-emerald-700 font-medium'
+                        : 'bg-white dark:bg-stone-800 text-stone-600 dark:text-stone-300 hover:text-stone-900 dark:hover:text-stone-100 hover:bg-stone-100 dark:hover:bg-stone-700 border-stone-200 dark:border-stone-700'
+                    }`}
+                    title="メッセージ内容をワンタップでコピー"
+                    aria-label="返信内容をコピー"
+                  >
+                    {copiedMessageId === msg.id ? (
+                      <>
+                        <Check className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                        <span className="text-[10.5px]">コピー完了</span>
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="w-3.5 h-3.5 text-stone-400 dark:text-stone-500" />
+                        <span className="text-[10.5px]">コピー</span>
+                      </>
+                    )}
+                  </button>
 
-              <span className="text-[10px] text-stone-400 dark:text-stone-500 font-mono">
+                  {/* 返信候補ボタン（コピーの横に1行で並べて配置） */}
+                  {msg.decisionData?.quickReplies && msg.decisionData.quickReplies.length > 0 && (
+                    <button
+                      type="button"
+                      id={`btn-toggle-quick-replies-${msg.id}`}
+                      onClick={() => toggleQuickReplies(msg.id)}
+                      className="inline-flex items-center gap-1 text-[11px] font-medium text-stone-500 hover:text-emerald-700 dark:text-stone-400 dark:hover:text-emerald-400 bg-stone-100/90 dark:bg-stone-800/90 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 border border-stone-200 dark:border-stone-700 rounded-full px-2.5 py-0.5 transition-all cursor-pointer shadow-2xs shrink-0"
+                    >
+                      <Sparkles className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
+                      <span>返信候補 ({msg.decisionData.quickReplies.length})</span>
+                      {expandedQuickReplies[msg.id] ? (
+                        <ChevronUp className="w-3 h-3 ml-0.5 text-stone-400" />
+                      ) : (
+                        <ChevronDown className="w-3 h-3 ml-0.5 text-stone-400" />
+                      )}
+                    </button>
+                  )}
+                </div>
+              ) : null}
+
+              <span className="text-[10px] text-stone-400 dark:text-stone-500 font-mono shrink-0 ml-auto">
                 {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
               </span>
             </div>
+
+            {/* 返信候補が展開された場合のチップ一覧（下部にスライド展開） */}
+            {msg.role === 'assistant' &&
+              msg.decisionData?.quickReplies &&
+              msg.decisionData.quickReplies.length > 0 &&
+              expandedQuickReplies[msg.id] && (
+                <div className="w-full sm:max-w-[92%] mt-1.5 pl-0.5 flex flex-wrap gap-1.5 animate-in fade-in slide-in-from-top-1 duration-150">
+                  {msg.decisionData.quickReplies.map((reply, i) => (
+                    <button
+                      key={i}
+                      id={`btn-quick-reply-${i}`}
+                      onClick={() => handleSend(reply)}
+                      className="text-xs bg-white dark:bg-stone-800 active:bg-stone-100 dark:active:bg-stone-700 text-stone-700 dark:text-stone-200 border border-stone-300 dark:border-stone-600 hover:border-emerald-600 dark:hover:border-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300 px-3 py-1.5 rounded-full transition-colors shadow-2xs cursor-pointer font-normal"
+                    >
+                      {reply}
+                    </button>
+                  ))}
+                </div>
+              )}
           </div>
         ))}
 
