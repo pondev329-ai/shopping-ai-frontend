@@ -1,5 +1,5 @@
 import React from 'react';
-import { X, Layers, Activity } from 'lucide-react';
+import { X, Layers, Activity, Camera, ChevronRight } from 'lucide-react';
 import { SessionStatusSummary } from '../types/session';
 import { AppScene } from '../types/chat';
 import { StatusPossibilityBoard } from './StatusPossibilityBoard';
@@ -11,6 +11,7 @@ interface StatusDetailModalProps {
   scene: AppScene;
   sessionTitle: string;
   onSelectCandidate?: (candidateTitle: string) => void;
+  onOpenSessionImages?: () => void;
 }
 
 export const StatusDetailModal: React.FC<StatusDetailModalProps> = ({
@@ -20,6 +21,7 @@ export const StatusDetailModal: React.FC<StatusDetailModalProps> = ({
   scene,
   sessionTitle,
   onSelectCandidate,
+  onOpenSessionImages,
 }) => {
   if (!isOpen) return null;
 
@@ -59,6 +61,43 @@ export const StatusDetailModal: React.FC<StatusDetailModalProps> = ({
 
         {/* モーダル本文（詳細ボード） */}
         <div className="flex-1 overflow-y-auto p-4 space-y-3">
+          {/* セッション写真へのアクセス */}
+          {onOpenSessionImages && (
+            <div
+              id="card-status-session-images"
+              className="p-3 bg-emerald-50/70 dark:bg-emerald-950/40 rounded-2xl border border-emerald-200 dark:border-emerald-800/80 flex items-center justify-between gap-3"
+            >
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="w-8 h-8 rounded-xl bg-emerald-100 dark:bg-emerald-900/80 text-emerald-800 dark:text-emerald-200 flex items-center justify-center shrink-0">
+                  <Camera className="w-4 h-4" />
+                </div>
+                <div className="min-w-0">
+                  <div className="text-xs font-bold text-stone-900 dark:text-stone-100 flex items-center gap-1.5">
+                    <span>このセッションの写真</span>
+                    <span className="text-[10px] text-emerald-700 dark:text-emerald-300 bg-white/80 dark:bg-emerald-900/80 px-1.5 py-0.2 rounded font-mono">
+                      Drive
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-stone-500 dark:text-stone-400 truncate mt-0.5">
+                    この買い物で送信・保存した写真を確認
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                id="btn-status-open-session-images"
+                onClick={() => {
+                  onClose();
+                  onOpenSessionImages();
+                }}
+                className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-semibold flex items-center gap-1 shrink-0 transition-colors cursor-pointer shadow-2xs active:scale-98"
+              >
+                <span>写真一覧</span>
+                <ChevronRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
+
           <p className="text-xs text-stone-600 dark:text-stone-300 leading-relaxed bg-white dark:bg-stone-800/80 p-3 rounded-xl border border-stone-200 dark:border-stone-700">
             Shopping AIが現在把握している前提条件、献立候補、確定項目・未確定項目の一覧です。
             候補をタップして「この候補について相談する」こともできます。

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Camera,
   X,
@@ -13,6 +13,7 @@ import {
   CheckCircle2,
   AlertCircle,
   Image as ImageIcon,
+  ZoomIn,
 } from 'lucide-react';
 import { ChatService } from '../services/chatService';
 import { SessionImageItem } from '../types/memory';
@@ -26,6 +27,7 @@ export interface SessionImagesModalProps {
   memoryConnectionId: string | null;
   onSelectImageForConsultation: (imageDataUrl: string, filename?: string) => void;
   onOpenMemoryConnect?: () => void;
+  onPreviewImage?: (url: string) => void;
 }
 
 /**
@@ -49,6 +51,7 @@ export const SessionImagesModal: React.FC<SessionImagesModalProps> = ({
   memoryConnectionId,
   onSelectImageForConsultation,
   onOpenMemoryConnect,
+  onPreviewImage,
 }) => {
   const [items, setItems] = useState<SessionImageItem[]>([]);
   const [isLoadingList, setIsLoadingList] = useState(false);
@@ -60,6 +63,8 @@ export const SessionImagesModal: React.FC<SessionImagesModalProps> = ({
   const [imageError, setImageError] = useState<string | null>(null);
   const [loadedImageDataUrl, setLoadedImageDataUrl] = useState<string | null>(null);
   const [loadedImageItem, setLoadedImageItem] = useState<SessionImageItem | null>(null);
+
+  const previewRef = useRef<HTMLDivElement>(null);
 
   // 一覧取得関数 (オンデマンド: POST /memory/images/list)
   const fetchImages = useCallback(async () => {
@@ -113,6 +118,13 @@ export const SessionImagesModal: React.FC<SessionImagesModalProps> = ({
     setImageError(null);
     setLoadedImageDataUrl(null);
     setLoadedImageItem(item);
+
+    // スマートフォン閲覧時、タップ後にプレビュー欄へスムーズにスクロール
+    if (typeof window !== 'undefined' && window.innerWidth < 768) {
+      setTimeout(() => {
+        previewRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }, 50);
+    }
 
     if (!memoryConnectionId || !chatService.getSessionImage) {
       setImageError('Google Drive Memoryが未接続です。');
@@ -394,7 +406,10 @@ export const SessionImagesModal: React.FC<SessionImagesModalProps> = ({
           </div>
 
           {/* 右側: 選択中写真プレビュー & 再利用アクション */}
-          <div className="w-full md:w-72 flex flex-col shrink-0 border-t md:border-t-0 md:border-l border-stone-200 dark:border-stone-800 pt-4 md:pt-0 md:pl-4">
+          <div
+            ref={previewRef}
+            className="w-full md:w-72 flex flex-col shrink-0 border-t md:border-t-0 md:border-l border-stone-200 dark:border-stone-800 pt-4 md:pt-0 md:pl-4"
+          >
             <h4 className="text-xs font-bold text-stone-700 dark:text-stone-300 uppercase tracking-wider mb-2">
               選択中の写真プレビュー
             </h4>
@@ -432,12 +447,27 @@ export const SessionImagesModal: React.FC<SessionImagesModalProps> = ({
 
               {!isLoadingImage && !imageError && loadedImageDataUrl && (
                 <div className="w-full h-full flex flex-col items-center justify-center gap-2">
-                  <div className="w-full h-44 rounded-xl overflow-hidden bg-black/5 dark:bg-black/20 flex items-center justify-center">
+                  <div
+                    className={`w-full h-44 rounded-xl overflow-hidden bg-black/5 dark:bg-black/20 flex items-center justify-center relative group ${
+                      onPreviewImage ? 'cursor-zoom-in' : ''
+                    }`}
+                    onClick={() => {
+                      if (onPreviewImage && loadedImageDataUrl) {
+                        onPreviewImage(loadedImageDataUrl);
+                      }
+                    }}
+                    title={onPreviewImage ? 'タップして拡大表示' : undefined}
+                  >
                     <img
                       src={loadedImageDataUrl}
                       alt={loadedImageItem?.name || '選択写真'}
                       className="w-full h-full object-contain rounded-xl"
                     />
+                    {onPreviewImage && (
+                      <div className="absolute top-2 right-2 p-1.5 rounded-lg bg-black/50 text-white opacity-80 group-hover:opacity-100 transition-opacity">
+                        <ZoomIn className="w-3.5 h-3.5" />
+                      </div>
+                    )}
                   </div>
                   <div className="text-center w-full min-w-0">
                     <p className="text-xs font-semibold text-stone-800 dark:text-stone-200 truncate">

@@ -1165,6 +1165,7 @@ export const ShoppingAIChat: React.FC<ShoppingAIChatProps> = ({
         onSelectCandidate={(candidateTitle) =>
           handleSend(`「${candidateTitle}」について詳しく教えてください。`)
         }
+        onOpenSessionImages={() => setShowSessionImagesModal(true)}
       />
 
       {/* 6. セッション管理ドロワー */}
@@ -1179,6 +1180,12 @@ export const ShoppingAIChat: React.FC<ShoppingAIChatProps> = ({
         onUpdateSessionStatus={handleUpdateSessionStatus}
         onRenameSession={handleRenameSession}
         onOpenMemoryRom={() => setShowMemoryRomModal(true)}
+        onOpenSessionImages={(sid) => {
+          if (sid && sid !== activeSessionId) {
+            handleSelectSession(sid);
+          }
+          setShowSessionImagesModal(true);
+        }}
       />
 
       {/* 7. 会話記録振り返りモーダル */}
@@ -1192,6 +1199,7 @@ export const ShoppingAIChat: React.FC<ShoppingAIChatProps> = ({
         chatService={chatService}
         memoryConnectionId={memoryConnectionId}
         onPreviewImage={(url) => setPreviewModalImage(url)}
+        onOpenSessionImages={() => setShowSessionImagesModal(true)}
       />
 
       {/* 8. Google Drive Memory モーダル */}
@@ -1504,6 +1512,7 @@ export const ShoppingAIChat: React.FC<ShoppingAIChatProps> = ({
           setPhotoError(null);
         }}
         onOpenMemoryConnect={() => setShowMemoryModal(true)}
+        onPreviewImage={(url) => setPreviewModalImage(url)}
       />
 
       {/* 12. 設定モーダル（ダークモード切り替え・文字サイズ調整） */}

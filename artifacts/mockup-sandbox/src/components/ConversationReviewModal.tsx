@@ -12,6 +12,7 @@ import {
   AlertCircle,
   Cloud,
   HardDrive,
+  Camera,
 } from 'lucide-react';
 import { ChatMessage } from '../types/chat';
 import { ChatService } from '../services/chatService';
@@ -26,6 +27,7 @@ interface ConversationReviewModalProps {
   chatService?: ChatService;
   memoryConnectionId?: string | null;
   onPreviewImage: (url: string) => void;
+  onOpenSessionImages?: () => void;
 }
 
 export const ConversationReviewModal: React.FC<ConversationReviewModalProps> = ({
@@ -38,6 +40,7 @@ export const ConversationReviewModal: React.FC<ConversationReviewModalProps> = (
   chatService,
   memoryConnectionId,
   onPreviewImage,
+  onOpenSessionImages,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [copiedId, setCopiedId] = useState<string | null>(null);
@@ -291,9 +294,9 @@ export const ConversationReviewModal: React.FC<ConversationReviewModalProps> = (
           </div>
         )}
 
-        {/* Search Bar */}
-        <div className="p-3 border-b border-stone-100 dark:border-stone-800 bg-white dark:bg-stone-900 shrink-0">
-          <div className="relative flex items-center bg-stone-100 dark:bg-stone-800 rounded-xl px-3 py-1.5 text-xs">
+        {/* Search Bar & Actions */}
+        <div className="p-3 border-b border-stone-100 dark:border-stone-800 bg-white dark:bg-stone-900 shrink-0 flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+          <div className="relative flex-1 flex items-center bg-stone-100 dark:bg-stone-800 rounded-xl px-3 py-1.5 text-xs">
             <Search className="w-3.5 h-3.5 text-stone-400 dark:text-stone-500 shrink-0 mr-2" />
             <input
               type="text"
@@ -313,6 +316,21 @@ export const ConversationReviewModal: React.FC<ConversationReviewModalProps> = (
               </button>
             )}
           </div>
+          {onOpenSessionImages && (
+            <button
+              type="button"
+              id="btn-review-open-session-images"
+              onClick={() => {
+                onClose();
+                onOpenSessionImages();
+              }}
+              className="flex items-center justify-center gap-1.5 px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/80 dark:hover:bg-emerald-900/80 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 rounded-xl text-xs font-semibold transition-colors cursor-pointer shrink-0 active:scale-98"
+              title="このセッションで保存された写真一覧を確認"
+            >
+              <Camera className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+              <span>写真一覧を見る</span>
+            </button>
+          )}
         </div>
 
         {/* Message Log Stream */}

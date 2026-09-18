@@ -14,6 +14,7 @@ import {
   Loader2,
   HardDrive,
   ChevronRight,
+  Camera,
 } from 'lucide-react';
 import { ShoppingSession } from '../types/session';
 
@@ -28,6 +29,7 @@ interface SessionDrawerProps {
   onUpdateSessionStatus: (sessionId: string, status: 'in_progress' | 'completed') => void;
   onRenameSession: (sessionId: string, newTitle: string) => void;
   onOpenMemoryRom?: () => void;
+  onOpenSessionImages?: (sessionId?: string) => void;
 }
 
 export const SessionDrawer: React.FC<SessionDrawerProps> = ({
@@ -41,6 +43,7 @@ export const SessionDrawer: React.FC<SessionDrawerProps> = ({
   onUpdateSessionStatus,
   onRenameSession,
   onOpenMemoryRom,
+  onOpenSessionImages,
 }) => {
   const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
   const [editingTitle, setEditingTitle] = useState('');
@@ -142,6 +145,10 @@ export const SessionDrawer: React.FC<SessionDrawerProps> = ({
                     setDeleteError(null);
                     setSessionToDelete(session);
                   }}
+                  onOpenImages={onOpenSessionImages ? () => {
+                    onClose();
+                    onOpenSessionImages(session.id);
+                  } : undefined}
                 />
               ))}
             </div>
@@ -174,12 +181,38 @@ export const SessionDrawer: React.FC<SessionDrawerProps> = ({
                       setDeleteError(null);
                       setSessionToDelete(session);
                     }}
+                    onOpenImages={onOpenSessionImages ? () => {
+                      onClose();
+                      onOpenSessionImages(session.id);
+                    } : undefined}
                   />
                 ))}
               </div>
             </div>
           )}
         </div>
+
+        {/* このセッションの写真へのリンク */}
+        {onOpenSessionImages && (
+          <div className="px-5 py-2.5 bg-emerald-50/60 dark:bg-emerald-950/40 border-t border-emerald-200/70 dark:border-emerald-800/60 flex items-center justify-between shrink-0">
+            <div className="text-[11px] text-stone-700 dark:text-stone-300 font-medium flex items-center gap-1.5">
+              <Camera className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+              <span>このセッションの写真</span>
+            </div>
+            <button
+              type="button"
+              id="btn-drawer-open-session-images"
+              onClick={() => {
+                onClose();
+                onOpenSessionImages(activeSessionId);
+              }}
+              className="text-xs font-semibold text-emerald-700 dark:text-emerald-300 hover:text-emerald-800 dark:hover:text-emerald-200 flex items-center gap-1 cursor-pointer hover:underline"
+            >
+              <span>写真一覧を開く</span>
+              <ChevronRight className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        )}
 
         {/* Google Drive Memory ROM 管理へのリンク */}
         {onOpenMemoryRom && (
@@ -314,6 +347,7 @@ interface SessionItemCardProps {
   onSelect: () => void;
   onToggleStatus: () => void;
   onRequestDelete: () => void;
+  onOpenImages?: () => void;
 }
 
 const SessionItemCard: React.FC<SessionItemCardProps> = ({
@@ -327,6 +361,7 @@ const SessionItemCard: React.FC<SessionItemCardProps> = ({
   onSelect,
   onToggleStatus,
   onRequestDelete,
+  onOpenImages,
 }) => {
   const candidateCount = session.statusSummary.candidates.length;
 
@@ -438,6 +473,18 @@ const SessionItemCard: React.FC<SessionItemCardProps> = ({
             <span className="px-2 py-1 bg-emerald-600 text-white rounded-lg text-xs font-medium select-none shadow-2xs">
               選択中
             </span>
+          )}
+
+          {onOpenImages && (
+            <button
+              type="button"
+              id={`btn-session-images-${session.id}`}
+              onClick={onOpenImages}
+              className="p-1.5 text-stone-500 hover:text-emerald-700 dark:text-stone-400 dark:hover:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/60 rounded-lg transition-colors cursor-pointer"
+              title="このセッションの写真一覧を確認"
+            >
+              <Camera className="w-3.5 h-3.5" />
+            </button>
           )}
 
           <button
