@@ -11,6 +11,10 @@ import {
   MemoryTimelineRecord,
   SaveSessionImageParams,
   SaveSessionImageResult,
+  ListSessionImagesParams,
+  ListSessionImagesResult,
+  GetSessionImageParams,
+  GetSessionImageResult,
   SaveSharedFlyerParams,
   SaveSharedFlyerResult,
   DeleteSharedFlyerParams,
@@ -37,6 +41,8 @@ export interface ChatService {
   getMemorySession?(sessionId: string, connectionId?: string): Promise<{ success: boolean; state?: Record<string, unknown> | null; error?: string }>;
   getConversationTimeline?(sessionId: string, connectionId?: string): Promise<GetConversationTimelineResult>;
   saveSessionImage?(params: SaveSessionImageParams): Promise<SaveSessionImageResult>;
+  listSessionImages?(params: ListSessionImagesParams): Promise<ListSessionImagesResult>;
+  getSessionImage?(params: GetSessionImageParams): Promise<GetSessionImageResult>;
   saveSharedFlyer?(params: SaveSharedFlyerParams): Promise<SaveSharedFlyerResult>;
   deleteSharedFlyer?(params: DeleteSharedFlyerParams): Promise<DeleteSharedFlyerResult>;
   listMemoryRom?(params?: ListMemoryRomParams): Promise<ListMemoryRomResult>;
@@ -1137,6 +1143,60 @@ export class RenderBackendChatAdapter implements ChatService {
         success: false,
         error: `通信エラー: ${errMsg}`,
       };
+    }
+  }
+
+  async listSessionImages(params: ListSessionImagesParams): Promise<ListSessionImagesResult> {
+    const activeConnectionId = (params.connectionId ?? this.memoryConnectionId)?.trim();
+    if (!activeConnectionId) return { success: false, items: [], error: 'Google Drive Memoryが未接続です。' };
+    if (!params.sessionId?.trim()) return { success: false, items: [], error: 'session_id が指定されていません。' };
+    try {
+      const response = await fetch(`${this.baseUrl}/memory/images/list`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          memory_connection_id: activeConnectionId,
+          session_id: params.sessionId.trim(),
+        }),
+      });
+      const data = await response.json().catch(() => null);
+      if (!response.ok || data?.ok === false || data?.success === false) {
+        return { success: false, items: [], error: data?.error || data?.message || `HTTP ${response.status}` };
+      }
+      const raw = Array.isArray(data?.result?.items) ? data.result.items
+        : Array.isArray(data?.result?.images) ? data.result.images
+        : Array.isArray(data?.items) ? data.items
+        : Array.isArray(data?.images) ? data.images : [];
+      return { success: true, items: raw };
+    } catch (err) {
+      return { success: false, items: [], error: err instanceof Error ? err.message : '通信エラー' };
+    }
+  }
+
+  async getSessionImage(params: GetSessionImageParams): Promise<GetSessionImageResult> {
+    const activeConnectionId = (params.connectionId ?? this.memoryConnectionId)?.trim();
+    if (!activeConnectionId) return { success: false, error: 'Google Drive Memoryが未接続です。' };
+    if (!params.sessionId?.trim() || !params.driveFileId?.trim()) {
+      return { success: false, error: 'session_id と drive_file_id が必要です。' };
+    }
+    try {
+      const response = await fetch(`${this.baseUrl}/memory/image/get`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          memory_connection_id: activeConnectionId,
+          session_id: params.sessionId.trim(),
+          drive_file_id: params.driveFileId.trim(),
+        }),
+      });
+      const data = await response.json().catch(() => null);
+      if (!response.ok || data?.ok === false || data?.success === false) {
+        return { success: false, error: data?.error || data?.message || `HTTP ${response.status}` };
+      }
+      const result = (data?.result && typeof data.result === 'object') ? data.result : data;
+      return { success: true, ...result };
+    } catch (err) {
+      return { success: false, error: err instanceof Error ? err.message : '通信エラー' };
     }
   }
 
