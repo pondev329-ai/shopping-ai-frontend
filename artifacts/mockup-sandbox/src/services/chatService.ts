@@ -15,6 +15,7 @@ import {
   ListSessionImagesResult,
   GetSessionImageParams,
   GetSessionImageResult,
+  SessionImageMetadata,
   SaveSharedFlyerParams,
   SaveSharedFlyerResult,
   DeleteSharedFlyerParams,
@@ -788,6 +789,291 @@ export class RenderBackendChatAdapter implements ChatService {
   }
 
   /**
+   * 現在のセッションでGoogle Drive上に保存されたSession Imageの一覧を取得します。
+   * Flow: Frontend -> Render POST /memory/images/list -> Memory Flow list_session_images -> Google Drive
+   * 
+   * 送信ペイロード:
+   * {
+   *   "memory_connection_id": "<現在のMemory接続ID>",
+   *   "session_id": "<現在のセッションID>"
+   * }
+   */
+  async listSessionImages(params: ListSessionImagesParams): Promise<ListSessionImagesResult> {
+    const activeConnectionId = (params.connectionId ?? this.memoryConnectionId)?.trim();
+    if (!activeConnectionId || activeConnectionId === 'null' || activeConnectionId === 'undefined') {
+      return {
+        success: false,
+        images: [],
+        error: 'Google Drive Memoryが未接続です。先にGoogleアカウントを接続してください。',
+      };
+    }
+
+    if (!params.sessionId || !params.sessionId.trim()) {
+      return {
+        success: false,
+        images: [],
+        error: 'セッションIDが指定されていません。',
+      };
+    }
+
+    const listUrl = `${this.baseUrl}/memory/images/list`;
+    const payload = {
+      memory_connection_id: activeConnectionId,
+      session_id: params.sessionId.trim(),
+    };
+
+    try {
+      const response = await fetch(listUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        let errorDetail = `HTTP ${response.status}`;
+        try {
+          const errData = await response.json();
+          if (errData.detail || errData.error || errData.message) {
+            errorDetail = errData.detail || errData.error || errData.message;
+          }
+        } catch {
+          try {
+            const errText = await response.text();
+            if (errText) errorDetail = errText;
+          } catch {
+            // ignore
+          }
+        }
+        return {
+          success: false,
+          images: [],
+          error: `写真一覧の取得に失敗しました (${errorDetail})`,
+        };
+      }
+
+      const resData = await response.json().catch(() => ({ ok: false }));
+      if (resData && (resData.ok === false || resData.success === false)) {
+        return {
+          success: false,
+          images: [],
+          error: resData.error || resData.message || resData.detail || '写真一覧の取得に失敗しました',
+        };
+      }
+
+      // レスポンス配列の柔軟な抽出
+      let rawList: unknown[] = [];
+      if (Array.isArray(resData)) {
+        rawList = resData;
+      } else if (Array.isArray(resData.images)) {
+        rawList = resData.images;
+      } else if (Array.isArray(resData.items)) {
+        rawList = resData.items;
+      } else if (Array.isArray(resData.files)) {
+        rawList = resData.files;
+      } else if (Array.isArray(resData.data)) {
+        rawList = resData.data;
+      } else if (resData.result && typeof resData.result === 'object') {
+        const r = resData.result as Record<string, unknown>;
+        if (Array.isArray(r)) {
+          rawList = r;
+        } else if (Array.isArray(r.images)) {
+          rawList = r.images;
+        } else if (Array.isArray(r.items)) {
+          rawList = r.items;
+        } else if (Array.isArray(r.files)) {
+          rawList = r.files;
+        }
+      }
+
+      const images: SessionImageMetadata[] = rawList
+        .filter((item): item is Record<string, unknown> => typeof item === 'object' && item !== null)
+        .map((item) => {
+          const driveFileId = String(
+            item.drive_file_id || item.id || item.file_id || item.driveFileId || ''
+          ).trim();
+          const name = String(item.name || item.filename || item.title || '写真').trim();
+          const imageKind = (item.image_kind || item.imageKind || item.kind || item.type || 'product') as string;
+          const createdTime = (item.created_time || item.created_at || item.modified_time || item.timestamp) as string | undefined;
+          const mimeType = (item.mime_type || item.mimeType) as string | undefined;
+          const thumbnailUrl = (item.thumbnail_url || item.thumbnailLink || item.thumbnail) as string | undefined;
+          const size = typeof item.size === 'number' ? item.size : undefined;
+
+          return {
+            drive_file_id: driveFileId,
+            name,
+            session_id: params.sessionId,
+            image_kind: imageKind,
+            created_time: createdTime,
+            mime_type: mimeType,
+            thumbnail_url: thumbnailUrl,
+            size,
+          };
+        })
+        .filter((img) => img.drive_file_id.length > 0);
+
+      return {
+        success: true,
+        images,
+      };
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : 'ネットワーク通信エラー';
+      return {
+        success: false,
+        images: [],
+        error: `写真一覧通信エラー: ${errMsg}`,
+      };
+    }
+  }
+
+  /**
+   * 現在のセッションに属する特定のSession Image本体を取得します。
+   * Flow: Frontend -> Render POST /memory/image/get -> Memory Flow get_session_image -> Google Drive
+   * 
+   * 送信ペイロード:
+   * {
+   *   "memory_connection_id": "<現在のMemory接続ID>",
+   *   "session_id": "<現在のセッションID>",
+   *   "drive_file_id": "<Session Image一覧から取得したファイルID>"
+   * }
+   */
+  async getSessionImage(params: GetSessionImageParams): Promise<GetSessionImageResult> {
+    const activeConnectionId = (params.connectionId ?? this.memoryConnectionId)?.trim();
+    if (!activeConnectionId || activeConnectionId === 'null' || activeConnectionId === 'undefined') {
+      return {
+        success: false,
+        error: 'Google Drive Memoryが未接続です。先にGoogleアカウントを接続してください。',
+      };
+    }
+
+    if (!params.sessionId || !params.sessionId.trim()) {
+      return {
+        success: false,
+        error: 'セッションIDが指定されていません。',
+      };
+    }
+
+    if (!params.driveFileId || !params.driveFileId.trim()) {
+      return {
+        success: false,
+        error: 'drive_file_id が指定されていません。',
+      };
+    }
+
+    const getUrl = `${this.baseUrl}/memory/image/get`;
+    const payload = {
+      memory_connection_id: activeConnectionId,
+      session_id: params.sessionId.trim(),
+      drive_file_id: params.driveFileId.trim(),
+    };
+
+    try {
+      const response = await fetch(getUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        let errorDetail = `HTTP ${response.status}`;
+        try {
+          const errData = await response.json();
+          if (errData.detail || errData.error || errData.message) {
+            errorDetail = errData.detail || errData.error || errData.message;
+          }
+        } catch {
+          try {
+            const errText = await response.text();
+            if (errText) errorDetail = errText;
+          } catch {
+            // ignore
+          }
+        }
+        return {
+          success: false,
+          error: `画像取得に失敗しました (${errorDetail})`,
+        };
+      }
+
+      const resData = await response.json().catch(() => null);
+      if (!resData) {
+        return {
+          success: false,
+          error: '画像データを正常に受信できませんでした。',
+        };
+      }
+
+      if (resData.ok === false || resData.success === false) {
+        return {
+          success: false,
+          error: resData.error || resData.message || resData.detail || '画像取得に失敗しました',
+        };
+      }
+
+      // レスポンスから画像ファイルデータ（Base64またはData URL）を抽出
+      const rawFile =
+        resData.file ||
+        resData.image ||
+        resData.data ||
+        resData.base64 ||
+        resData.content ||
+        resData.result?.file ||
+        resData.result?.image ||
+        resData.result?.data;
+
+      if (!rawFile || typeof rawFile !== 'string') {
+        return {
+          success: false,
+          error: 'レスポンス内に有効な画像データが見つかりませんでした。',
+        };
+      }
+
+      const filename =
+        (resData.filename as string) ||
+        (resData.name as string) ||
+        (resData.result?.filename as string) ||
+        undefined;
+
+      const mimeType =
+        (resData.mime_type as string) ||
+        (resData.mimeType as string) ||
+        (resData.result?.mime_type as string) ||
+        'image/jpeg';
+
+      const imageKind =
+        (resData.image_kind as string) ||
+        (resData.kind as string) ||
+        (resData.result?.image_kind as string) ||
+        undefined;
+
+      // Data URL形式に正規化（すでに data: で始まっていればそのまま、Base64のみなら data:... 付与）
+      let normalizedDataUrl = rawFile.trim();
+      if (!normalizedDataUrl.startsWith('data:')) {
+        normalizedDataUrl = `data:${mimeType};base64,${normalizedDataUrl}`;
+      }
+
+      return {
+        success: true,
+        driveFileId: params.driveFileId,
+        file: normalizedDataUrl,
+        filename,
+        mimeType,
+        imageKind,
+        data: resData,
+      };
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : 'ネットワーク通信エラー';
+      return {
+        success: false,
+        error: `画像取得通信エラー: ${errMsg}`,
+      };
+    }
+  }
+
+  /**
    * チラシ画像をShared FlyerとしてGoogle Drive Memoryへ保存します。
    * Flow: Frontend -> Render /memory/flyer/put -> Memory Flow put_flyer -> Google Drive
    * 
@@ -1143,60 +1429,6 @@ export class RenderBackendChatAdapter implements ChatService {
         success: false,
         error: `通信エラー: ${errMsg}`,
       };
-    }
-  }
-
-  async listSessionImages(params: ListSessionImagesParams): Promise<ListSessionImagesResult> {
-    const activeConnectionId = (params.connectionId ?? this.memoryConnectionId)?.trim();
-    if (!activeConnectionId) return { success: false, items: [], error: 'Google Drive Memoryが未接続です。' };
-    if (!params.sessionId?.trim()) return { success: false, items: [], error: 'session_id が指定されていません。' };
-    try {
-      const response = await fetch(`${this.baseUrl}/memory/images/list`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          memory_connection_id: activeConnectionId,
-          session_id: params.sessionId.trim(),
-        }),
-      });
-      const data = await response.json().catch(() => null);
-      if (!response.ok || data?.ok === false || data?.success === false) {
-        return { success: false, items: [], error: data?.error || data?.message || `HTTP ${response.status}` };
-      }
-      const raw = Array.isArray(data?.result?.items) ? data.result.items
-        : Array.isArray(data?.result?.images) ? data.result.images
-        : Array.isArray(data?.items) ? data.items
-        : Array.isArray(data?.images) ? data.images : [];
-      return { success: true, items: raw };
-    } catch (err) {
-      return { success: false, items: [], error: err instanceof Error ? err.message : '通信エラー' };
-    }
-  }
-
-  async getSessionImage(params: GetSessionImageParams): Promise<GetSessionImageResult> {
-    const activeConnectionId = (params.connectionId ?? this.memoryConnectionId)?.trim();
-    if (!activeConnectionId) return { success: false, error: 'Google Drive Memoryが未接続です。' };
-    if (!params.sessionId?.trim() || !params.driveFileId?.trim()) {
-      return { success: false, error: 'session_id と drive_file_id が必要です。' };
-    }
-    try {
-      const response = await fetch(`${this.baseUrl}/memory/image/get`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          memory_connection_id: activeConnectionId,
-          session_id: params.sessionId.trim(),
-          drive_file_id: params.driveFileId.trim(),
-        }),
-      });
-      const data = await response.json().catch(() => null);
-      if (!response.ok || data?.ok === false || data?.success === false) {
-        return { success: false, error: data?.error || data?.message || `HTTP ${response.status}` };
-      }
-      const result = (data?.result && typeof data.result === 'object') ? data.result : data;
-      return { success: true, ...result };
-    } catch (err) {
-      return { success: false, error: err instanceof Error ? err.message : '通信エラー' };
     }
   }
 

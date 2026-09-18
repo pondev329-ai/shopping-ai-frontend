@@ -50,6 +50,7 @@ import { ConversationReviewModal } from './ConversationReviewModal';
 import { MemoryRomModal } from './MemoryRomModal';
 import { FlyerModal } from './FlyerModal';
 import { SettingsModal } from './SettingsModal';
+import { SessionImagesModal } from './SessionImagesModal';
 
 interface ShoppingAIChatProps {
   chatService?: ChatService;
@@ -82,6 +83,7 @@ export const ShoppingAIChat: React.FC<ShoppingAIChatProps> = ({
   const [showConversationReview, setShowConversationReview] = useState(false);
   const [showMemoryRomModal, setShowMemoryRomModal] = useState(false);
   const [showFlyerModal, setShowFlyerModal] = useState(false);
+  const [showSessionImagesModal, setShowSessionImagesModal] = useState(false);
   const [showStatusDetailModal, setShowStatusDetailModal] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [showAppMenu, setShowAppMenu] = useState(false);
@@ -1402,6 +1404,29 @@ export const ShoppingAIChat: React.FC<ShoppingAIChatProps> = ({
                 <ChevronRight className="w-4 h-4 text-stone-400 dark:text-stone-500 group-hover:text-blue-700 dark:group-hover:text-blue-400 shrink-0" />
               </button>
 
+              {/* このセッションの過去の写真を見る (Session Images on Google Drive) */}
+              <button
+                type="button"
+                id="btn-photo-action-session-images"
+                onClick={() => {
+                  setShowPhotoSheet(false);
+                  setShowSessionImagesModal(true);
+                }}
+                className="w-full flex items-center gap-3.5 p-3.5 rounded-2xl border border-stone-200 dark:border-stone-700 hover:border-emerald-500 dark:hover:border-emerald-500 hover:bg-emerald-50/40 dark:hover:bg-emerald-950/40 active:bg-emerald-100/50 dark:active:bg-emerald-900/50 transition-all text-left cursor-pointer group"
+              >
+                <div className="w-11 h-11 rounded-xl bg-emerald-100 dark:bg-emerald-900/80 text-emerald-800 dark:text-emerald-200 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform shadow-2xs">
+                  <HardDrive className="w-5 h-5" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="font-semibold text-stone-900 dark:text-stone-100 text-sm">このセッションの過去の写真</span>
+                    <span className="text-[10px] text-emerald-700 dark:text-emerald-300 bg-emerald-100/70 dark:bg-emerald-900/70 px-1.5 py-0.2 rounded font-mono font-medium">Drive</span>
+                  </div>
+                  <div className="text-xs text-stone-500 dark:text-stone-400 mt-0.5">この買い物セッション中に保存した写真を再利用</div>
+                </div>
+                <ChevronRight className="w-4 h-4 text-stone-400 dark:text-stone-500 group-hover:text-emerald-700 dark:group-hover:text-emerald-400 shrink-0" />
+              </button>
+
               <button
                 type="button"
                 id="btn-cancel-photo-sheet"
@@ -1463,6 +1488,22 @@ export const ShoppingAIChat: React.FC<ShoppingAIChatProps> = ({
           setShowMemoryModal(true);
         }}
         onPreviewImage={(url) => setPreviewModalImage(url)}
+      />
+
+      {/* 11-c. このセッションの写真モーダル (Session Images on Google Drive) */}
+      <SessionImagesModal
+        isOpen={showSessionImagesModal}
+        onClose={() => setShowSessionImagesModal(false)}
+        sessionId={activeSession.id}
+        sessionTitle={activeSession.title}
+        chatService={chatService}
+        memoryConnectionId={memoryConnectionId}
+        onSelectImageForConsultation={(imageDataUrl, filename) => {
+          setSelectedImage(imageDataUrl);
+          setSelectedImageFilename(filename || 'session_photo.jpg');
+          setPhotoError(null);
+        }}
+        onOpenMemoryConnect={() => setShowMemoryModal(true)}
       />
 
       {/* 12. 設定モーダル（ダークモード切り替え・文字サイズ調整） */}
@@ -1587,6 +1628,30 @@ export const ShoppingAIChat: React.FC<ShoppingAIChatProps> = ({
                       </span>
                     </div>
                     <p className="text-[11px] text-stone-500 dark:text-stone-400 truncate mt-0.5">買い物用のチラシを登録・撮影・確認</p>
+                  </div>
+                </button>
+
+                {/* 2-b. このセッションの写真 (Session Images on Google Drive) */}
+                <button
+                  type="button"
+                  id="menu-item-session-images"
+                  onClick={() => {
+                    setShowAppMenu(false);
+                    setShowSessionImagesModal(true);
+                  }}
+                  className="w-full flex items-center gap-3 p-3 rounded-xl hover:bg-stone-100 dark:hover:bg-stone-800 active:bg-stone-200 dark:active:bg-stone-700 transition-colors text-left cursor-pointer group border border-transparent hover:border-stone-200 dark:hover:border-stone-700"
+                >
+                  <div className="w-9 h-9 rounded-xl bg-stone-100 dark:bg-stone-800 group-hover:bg-emerald-100 dark:group-hover:bg-emerald-950/80 text-stone-600 dark:text-stone-300 group-hover:text-emerald-700 dark:group-hover:text-emerald-300 flex items-center justify-center shrink-0 transition-colors">
+                    <Camera className="w-4 h-4" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-stone-900 dark:text-stone-100">このセッションの写真</span>
+                      <span className="text-[10px] text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/60 px-2 py-0.5 rounded-full font-medium">
+                        セッション限定
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-stone-500 dark:text-stone-400 truncate mt-0.5">この買い物でDriveに保存された過去写真</p>
                   </div>
                 </button>
 

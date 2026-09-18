@@ -312,6 +312,62 @@ export interface SaveSessionImageResult {
 }
 
 /**
+ * Session Image メタデータ（一覧取得時の各画像情報）
+ * Google Drive 上に保存されているSession Imageのファイルメタデータです。
+ */
+export interface SessionImageMetadata {
+  drive_file_id: string;
+  name: string;
+  session_id?: string;
+  image_kind?: 'product' | 'shelf' | 'flyer' | 'other' | string;
+  created_time?: string;
+  modified_time?: string;
+  mime_type?: string;
+  thumbnail_url?: string;
+  size?: number;
+}
+
+/**
+ * Session Image 一覧取得パラメータ (POST /memory/images/list)
+ */
+export interface ListSessionImagesParams {
+  sessionId: string;
+  connectionId?: string;
+}
+
+/**
+ * Session Image 一覧取得結果
+ */
+export interface ListSessionImagesResult {
+  success: boolean;
+  images: SessionImageMetadata[];
+  error?: string;
+}
+
+/**
+ * 個別 Session Image 取得パラメータ (POST /memory/image/get)
+ */
+export interface GetSessionImageParams {
+  sessionId: string;
+  driveFileId: string;
+  connectionId?: string;
+}
+
+/**
+ * 個別 Session Image 取得結果
+ */
+export interface GetSessionImageResult {
+  success: boolean;
+  driveFileId?: string;
+  file?: string; // Data URL (data:image/jpeg;base64,...) または Base64
+  filename?: string;
+  mimeType?: string;
+  imageKind?: string;
+  error?: string;
+  data?: unknown;
+}
+
+/**
  * チラシ画像をGoogle Drive Memory (Shared Flyer) へ保存するパラメータと結果
  * (Render POST /memory/flyer/put 経由)
  * ※ session_id は付与せず、複数セッションで共通利用されるShared Flyerとして保存
