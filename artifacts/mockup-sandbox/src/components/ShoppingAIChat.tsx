@@ -29,6 +29,7 @@ import {
   ChevronUp,
   Settings,
   Type,
+  Newspaper,
 } from 'lucide-react';
 import { ChatMessage, SuggestionOption } from '../types/chat';
 import { ShoppingSession } from '../types/session';
@@ -47,6 +48,7 @@ import { StatusDetailModal } from './StatusDetailModal';
 import { SessionDrawer } from './SessionDrawer';
 import { ConversationReviewModal } from './ConversationReviewModal';
 import { MemoryRomModal } from './MemoryRomModal';
+import { FlyerModal } from './FlyerModal';
 import { SettingsModal } from './SettingsModal';
 
 interface ShoppingAIChatProps {
@@ -79,6 +81,7 @@ export const ShoppingAIChat: React.FC<ShoppingAIChatProps> = ({
   const [showSessionDrawer, setShowSessionDrawer] = useState(false);
   const [showConversationReview, setShowConversationReview] = useState(false);
   const [showMemoryRomModal, setShowMemoryRomModal] = useState(false);
+  const [showFlyerModal, setShowFlyerModal] = useState(false);
   const [showStatusDetailModal, setShowStatusDetailModal] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [showAppMenu, setShowAppMenu] = useState(false);
@@ -1449,6 +1452,19 @@ export const ShoppingAIChat: React.FC<ShoppingAIChatProps> = ({
         onOpenConnectModal={() => setShowMemoryModal(true)}
       />
 
+      {/* 11-b. チラシ管理・登録モーダル (Shared Flyer) */}
+      <FlyerModal
+        isOpen={showFlyerModal}
+        onClose={() => setShowFlyerModal(false)}
+        chatService={chatService}
+        memoryConnectionId={memoryConnectionId}
+        onOpenConnectModal={() => {
+          setShowFlyerModal(false);
+          setShowMemoryModal(true);
+        }}
+        onPreviewImage={(url) => setPreviewModalImage(url)}
+      />
+
       {/* 12. 設定モーダル（ダークモード切り替え・文字サイズ調整） */}
       <SettingsModal
         isOpen={showSettingsModal}
@@ -1550,7 +1566,31 @@ export const ShoppingAIChat: React.FC<ShoppingAIChatProps> = ({
                   </div>
                 </button>
 
-                {/* 2. 記憶（ROM）管理 */}
+                {/* 2. チラシ（Shared Flyer） */}
+                <button
+                  type="button"
+                  id="menu-item-flyer"
+                  onClick={() => {
+                    setShowAppMenu(false);
+                    setShowFlyerModal(true);
+                  }}
+                  className="w-full flex items-center gap-3 p-3 rounded-xl hover:bg-stone-100 dark:hover:bg-stone-800 active:bg-stone-200 dark:active:bg-stone-700 transition-colors text-left cursor-pointer group border border-transparent hover:border-stone-200 dark:hover:border-stone-700"
+                >
+                  <div className="w-9 h-9 rounded-xl bg-stone-100 dark:bg-stone-800 group-hover:bg-orange-100 dark:group-hover:bg-orange-950/80 text-stone-600 dark:text-stone-300 group-hover:text-orange-700 dark:group-hover:text-orange-300 flex items-center justify-center shrink-0 transition-colors">
+                    <Newspaper className="w-4 h-4" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-stone-900 dark:text-stone-100">チラシ</span>
+                      <span className="text-[10px] text-orange-700 dark:text-orange-400 bg-orange-50 dark:bg-orange-950/60 px-2 py-0.5 rounded-full font-medium">
+                        共有データ
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-stone-500 dark:text-stone-400 truncate mt-0.5">買い物用のチラシを登録・撮影・確認</p>
+                  </div>
+                </button>
+
+                {/* 3. 記憶（ROM）管理 */}
                 <button
                   type="button"
                   id="menu-item-memory-rom"

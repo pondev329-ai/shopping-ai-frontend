@@ -11,6 +11,8 @@ import {
   MemoryTimelineRecord,
   SaveSessionImageParams,
   SaveSessionImageResult,
+  SaveSharedFlyerParams,
+  SaveSharedFlyerResult,
 } from '../types/memory';
 
 /**
@@ -33,6 +35,7 @@ export interface ChatService {
   getMemorySession?(sessionId: string, connectionId?: string): Promise<{ success: boolean; state?: Record<string, unknown> | null; error?: string }>;
   getConversationTimeline?(sessionId: string, connectionId?: string): Promise<GetConversationTimelineResult>;
   saveSessionImage?(params: SaveSessionImageParams): Promise<SaveSessionImageResult>;
+  saveSharedFlyer?(params: SaveSharedFlyerParams): Promise<SaveSharedFlyerResult>;
   listMemoryRom?(params?: ListMemoryRomParams): Promise<ListMemoryRomResult>;
   deleteMemoryRomItem?(params: DeleteMemoryRomParams): Promise<DeleteMemoryRomResult>;
   onMemoryConnectionChange?(callback: (id: string | null) => void): () => void;
@@ -771,6 +774,113 @@ export class RenderBackendChatAdapter implements ChatService {
       return {
         success: false,
         error: `写真保存通信エラー: ${errMsg}`,
+      };
+    }
+  }
+
+  /**
+   * チラシ画像をShared FlyerとしてGoogle Drive Memoryへ保存します。
+   * Flow: Frontend -> Render /memory/flyer/put -> Memory Flow put_flyer -> Google Drive
+   * 
+   * 送信ペイロード:
+   * {
+   *   "memory_connection_id": "<現在のMemory接続ID>",
+   *   "file": "<Base64データまたはData URL>",
+   *   "filename": "<元画像または適切な画像ファイル名>",
+   *   "store": "<店舗名 (任意)>",
+   *   "valid_from": "<有効開始日 (任意)>",
+   *   "valid_until": "<有効終了日 (任意)>",
+   *   "notes": "<メモ (任意)>"
+   * }
+   * 
+   * ※ session_idは含めず、複数セッションから横断的に利用可能なShared Flyerとして保存されます。
+   */
+  async saveSharedFlyer(
+    params: SaveSharedFlyerParams
+  ): Promise<SaveSharedFlyerResult> {
+    const activeConnectionId = (params.connectionId ?? this.memoryConnectionId)?.trim();
+    if (!activeConnectionId || activeConnectionId === 'null' || activeConnectionId === 'undefined') {
+      return {
+        success: false,
+        error: 'Google Drive Memoryが未接続です。先にGoogleアカウントを接続してください。',
+      };
+    }
+
+    if (!params.file) {
+      return {
+        success: false,
+        error: 'チラシ画像データが存在しません',
+      };
+    }
+
+    const flyerUrl = `${this.baseUrl}/memory/flyer/put`;
+    const filename = params.filename || `flyer_${Date.now()}.jpg`;
+    const payload: Record<string, unknown> = {
+      memory_connection_id: activeConnectionId,
+      file: params.file,
+      filename,
+    };
+
+    if (params.store && params.store.trim()) {
+      payload.store = params.store.trim();
+    }
+    if (params.valid_from && params.valid_from.trim()) {
+      payload.valid_from = params.valid_from.trim();
+    }
+    if (params.valid_until && params.valid_until.trim()) {
+      payload.valid_until = params.valid_until.trim();
+    }
+    if (params.notes && params.notes.trim()) {
+      payload.notes = params.notes.trim();
+    }
+
+    try {
+      const response = await fetch(flyerUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        let errorDetail = `HTTP ${response.status}`;
+        try {
+          const errData = await response.json();
+          if (errData.detail || errData.error || errData.message) {
+            errorDetail = errData.detail || errData.error || errData.message;
+          }
+        } catch {
+          try {
+            const errText = await response.text();
+            if (errText) errorDetail = errText;
+          } catch {
+            // ignore
+          }
+        }
+        return {
+          success: false,
+          error: `チラシ保存に失敗しました (${errorDetail})`,
+        };
+      }
+
+      const resData = await response.json().catch(() => null);
+      if (resData && (resData.ok === false || resData.success === false)) {
+        return {
+          success: false,
+          error: resData.error || resData.message || resData.detail || 'チラシ保存に失敗しました',
+        };
+      }
+
+      return {
+        success: true,
+        data: resData,
+      };
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : 'ネットワーク通信エラー';
+      return {
+        success: false,
+        error: `チラシ保存通信エラー: ${errMsg}`,
       };
     }
   }

@@ -268,3 +268,39 @@ export interface SaveSessionImageResult {
   error?: string;
   data?: unknown;
 }
+
+/**
+ * チラシ画像をGoogle Drive Memory (Shared Flyer) へ保存するパラメータと結果
+ * (Render POST /memory/flyer/put 経由)
+ * ※ session_id は付与せず、複数セッションで共通利用されるShared Flyerとして保存
+ */
+export interface SaveSharedFlyerParams {
+  file: string; // Base64 または Data URL (data:image/jpeg;base64,...)
+  filename?: string;
+  store?: string;
+  valid_from?: string;
+  valid_until?: string;
+  notes?: string;
+  connectionId?: string;
+}
+
+export interface SaveSharedFlyerResult {
+  success: boolean;
+  error?: string;
+  data?: unknown;
+}
+
+/**
+ * チラシ情報の表示用モデル
+ */
+export interface SharedFlyerItem {
+  id: string;
+  name: string;
+  store?: string;
+  valid_from?: string;
+  valid_until?: string;
+  notes?: string;
+  updated_at?: string;
+  imageUrl?: string;
+  drive_file_id?: string;
+}
