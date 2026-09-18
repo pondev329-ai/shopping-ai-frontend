@@ -15,7 +15,7 @@ import {
   ListSessionImagesResult,
   GetSessionImageParams,
   GetSessionImageResult,
-  SessionImageMetadata,
+  SessionImageItem,
   SaveSharedFlyerParams,
   SaveSharedFlyerResult,
   DeleteSharedFlyerParams,
@@ -803,7 +803,7 @@ export class RenderBackendChatAdapter implements ChatService {
     if (!activeConnectionId || activeConnectionId === 'null' || activeConnectionId === 'undefined') {
       return {
         success: false,
-        images: [],
+        items: [],
         error: 'Google Drive Memoryが未接続です。先にGoogleアカウントを接続してください。',
       };
     }
@@ -811,7 +811,7 @@ export class RenderBackendChatAdapter implements ChatService {
     if (!params.sessionId || !params.sessionId.trim()) {
       return {
         success: false,
-        images: [],
+        items: [],
         error: 'セッションIDが指定されていません。',
       };
     }
@@ -848,7 +848,7 @@ export class RenderBackendChatAdapter implements ChatService {
         }
         return {
           success: false,
-          images: [],
+          items: [],
           error: `写真一覧の取得に失敗しました (${errorDetail})`,
         };
       }
@@ -857,19 +857,19 @@ export class RenderBackendChatAdapter implements ChatService {
       if (resData && (resData.ok === false || resData.success === false)) {
         return {
           success: false,
-          images: [],
+          items: [],
           error: resData.error || resData.message || resData.detail || '写真一覧の取得に失敗しました',
         };
       }
 
-      // レスポンス配列の柔軟な抽出
+      // レスポンス配列の抽出 (items, images, files 等の柔軟な対応)
       let rawList: unknown[] = [];
       if (Array.isArray(resData)) {
         rawList = resData;
-      } else if (Array.isArray(resData.images)) {
-        rawList = resData.images;
       } else if (Array.isArray(resData.items)) {
         rawList = resData.items;
+      } else if (Array.isArray(resData.images)) {
+        rawList = resData.images;
       } else if (Array.isArray(resData.files)) {
         rawList = resData.files;
       } else if (Array.isArray(resData.data)) {
@@ -878,50 +878,55 @@ export class RenderBackendChatAdapter implements ChatService {
         const r = resData.result as Record<string, unknown>;
         if (Array.isArray(r)) {
           rawList = r;
-        } else if (Array.isArray(r.images)) {
-          rawList = r.images;
         } else if (Array.isArray(r.items)) {
           rawList = r.items;
+        } else if (Array.isArray(r.images)) {
+          rawList = r.images;
         } else if (Array.isArray(r.files)) {
           rawList = r.files;
         }
       }
 
-      const images: SessionImageMetadata[] = rawList
+      const items: SessionImageItem[] = rawList
         .filter((item): item is Record<string, unknown> => typeof item === 'object' && item !== null)
         .map((item) => {
           const driveFileId = String(
             item.drive_file_id || item.id || item.file_id || item.driveFileId || ''
           ).trim();
           const name = String(item.name || item.filename || item.title || '写真').trim();
-          const imageKind = (item.image_kind || item.imageKind || item.kind || item.type || 'product') as string;
-          const createdTime = (item.created_time || item.created_at || item.modified_time || item.timestamp) as string | undefined;
           const mimeType = (item.mime_type || item.mimeType) as string | undefined;
-          const thumbnailUrl = (item.thumbnail_url || item.thumbnailLink || item.thumbnail) as string | undefined;
-          const size = typeof item.size === 'number' ? item.size : undefined;
+          const sessionId = (item.session_id || item.sessionId || params.sessionId) as string | undefined;
+          const eventId = (item.event_id || item.eventId) as string | undefined;
+          const memoryType = (item.memory_type || item.image_kind || item.imageKind || item.type || 'session_image') as string | undefined;
+          const createdAt = (item.created_at || item.created_time || item.timestamp) as string | undefined;
+          const updatedAt = (item.updated_at || item.modified_time) as string | undefined;
+          const size = (item.size as number | string | undefined);
+          const metadata = (item.metadata as Record<string, unknown> | undefined);
 
           return {
             drive_file_id: driveFileId,
             name,
-            session_id: params.sessionId,
-            image_kind: imageKind,
-            created_time: createdTime,
             mime_type: mimeType,
-            thumbnail_url: thumbnailUrl,
+            session_id: sessionId,
+            event_id: eventId,
+            memory_type: memoryType,
+            created_at: createdAt,
+            updated_at: updatedAt,
             size,
+            metadata,
           };
         })
         .filter((img) => img.drive_file_id.length > 0);
 
       return {
         success: true,
-        images,
+        items,
       };
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : 'ネットワーク通信エラー';
       return {
         success: false,
-        images: [],
+        items: [],
         error: `写真一覧通信エラー: ${errMsg}`,
       };
     }
@@ -1013,28 +1018,30 @@ export class RenderBackendChatAdapter implements ChatService {
         };
       }
 
-      // レスポンスから画像ファイルデータ（Base64またはData URL）を抽出
-      const rawFile =
+      // レスポンスから画像ファイルデータ（image_content_b64 または file 等）を抽出
+      const rawB64 =
+        resData.image_content_b64 ||
         resData.file ||
         resData.image ||
         resData.data ||
         resData.base64 ||
         resData.content ||
+        resData.result?.image_content_b64 ||
         resData.result?.file ||
         resData.result?.image ||
         resData.result?.data;
 
-      if (!rawFile || typeof rawFile !== 'string') {
+      if (!rawB64 || typeof rawB64 !== 'string') {
         return {
           success: false,
           error: 'レスポンス内に有効な画像データが見つかりませんでした。',
         };
       }
 
-      const filename =
-        (resData.filename as string) ||
+      const name =
         (resData.name as string) ||
-        (resData.result?.filename as string) ||
+        (resData.filename as string) ||
+        (resData.result?.name as string) ||
         undefined;
 
       const mimeType =
@@ -1043,26 +1050,34 @@ export class RenderBackendChatAdapter implements ChatService {
         (resData.result?.mime_type as string) ||
         'image/jpeg';
 
-      const imageKind =
-        (resData.image_kind as string) ||
-        (resData.kind as string) ||
-        (resData.result?.image_kind as string) ||
+      const sessionId =
+        (resData.session_id as string) ||
+        (resData.sessionId as string) ||
+        params.sessionId;
+
+      const eventId =
+        (resData.event_id as string) ||
+        (resData.eventId as string) ||
         undefined;
 
-      // Data URL形式に正規化（すでに data: で始まっていればそのまま、Base64のみなら data:... 付与）
-      let normalizedDataUrl = rawFile.trim();
-      if (!normalizedDataUrl.startsWith('data:')) {
-        normalizedDataUrl = `data:${mimeType};base64,${normalizedDataUrl}`;
-      }
+      const memoryType =
+        (resData.memory_type as string) ||
+        (resData.image_kind as string) ||
+        'session_image';
+
+      const driveFileId =
+        (resData.drive_file_id as string) ||
+        params.driveFileId;
 
       return {
         success: true,
-        driveFileId: params.driveFileId,
-        file: normalizedDataUrl,
-        filename,
-        mimeType,
-        imageKind,
-        data: resData,
+        drive_file_id: driveFileId,
+        name,
+        mime_type: mimeType,
+        session_id: sessionId,
+        event_id: eventId,
+        memory_type: memoryType,
+        image_content_b64: rawB64.trim(),
       };
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : 'ネットワーク通信エラー';

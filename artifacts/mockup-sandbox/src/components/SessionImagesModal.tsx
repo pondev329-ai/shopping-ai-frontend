@@ -15,7 +15,7 @@ import {
   Image as ImageIcon,
 } from 'lucide-react';
 import { ChatService } from '../services/chatService';
-import { SessionImageMetadata } from '../types/memory';
+import { SessionImageItem } from '../types/memory';
 
 export interface SessionImagesModalProps {
   isOpen: boolean;
@@ -50,7 +50,7 @@ export const SessionImagesModal: React.FC<SessionImagesModalProps> = ({
   onSelectImageForConsultation,
   onOpenMemoryConnect,
 }) => {
-  const [images, setImages] = useState<SessionImageMetadata[]>([]);
+  const [items, setItems] = useState<SessionImageItem[]>([]);
   const [isLoadingList, setIsLoadingList] = useState(false);
   const [listError, setListError] = useState<string | null>(null);
 
@@ -59,12 +59,12 @@ export const SessionImagesModal: React.FC<SessionImagesModalProps> = ({
   const [isLoadingImage, setIsLoadingImage] = useState(false);
   const [imageError, setImageError] = useState<string | null>(null);
   const [loadedImageDataUrl, setLoadedImageDataUrl] = useState<string | null>(null);
-  const [loadedImageMeta, setLoadedImageMeta] = useState<SessionImageMetadata | null>(null);
+  const [loadedImageItem, setLoadedImageItem] = useState<SessionImageItem | null>(null);
 
-  // 一覧取得関数 (オンデマンド)
+  // 一覧取得関数 (オンデマンド: POST /memory/images/list)
   const fetchImages = useCallback(async () => {
     if (!memoryConnectionId || !chatService.listSessionImages) {
-      setImages([]);
+      setItems([]);
       return;
     }
 
@@ -78,13 +78,13 @@ export const SessionImagesModal: React.FC<SessionImagesModalProps> = ({
       });
 
       if (res.success) {
-        // 新しい順にソート（作成日時がある場合）
-        const sorted = [...res.images].sort((a, b) => {
-          const tA = a.created_time ? new Date(a.created_time).getTime() : 0;
-          const tB = b.created_time ? new Date(b.created_time).getTime() : 0;
+        // 新しい順にソート（作成日時・更新日時がある場合）
+        const sorted = [...res.items].sort((a, b) => {
+          const tA = a.created_at ? new Date(a.created_at).getTime() : 0;
+          const tB = b.created_at ? new Date(b.created_at).getTime() : 0;
           return tB - tA;
         });
-        setImages(sorted);
+        setItems(sorted);
       } else {
         setListError(res.error || '写真一覧の取得に失敗しました。');
       }
@@ -101,18 +101,18 @@ export const SessionImagesModal: React.FC<SessionImagesModalProps> = ({
     if (isOpen) {
       setSelectedFileId(null);
       setLoadedImageDataUrl(null);
-      setLoadedImageMeta(null);
+      setLoadedImageItem(null);
       setImageError(null);
       fetchImages();
     }
   }, [isOpen, fetchImages]);
 
-  // 個別画像取得関数 (ユーザーが特定の画像を選択した時のみ実行)
-  const handleSelectImage = async (meta: SessionImageMetadata) => {
-    setSelectedFileId(meta.drive_file_id);
+  // 個別画像取得関数 (ユーザーが特定の画像を選択した時のみ実行: POST /memory/image/get)
+  const handleSelectImage = async (item: SessionImageItem) => {
+    setSelectedFileId(item.drive_file_id);
     setImageError(null);
     setLoadedImageDataUrl(null);
-    setLoadedImageMeta(meta);
+    setLoadedImageItem(item);
 
     if (!memoryConnectionId || !chatService.getSessionImage) {
       setImageError('Google Drive Memoryが未接続です。');
@@ -123,12 +123,17 @@ export const SessionImagesModal: React.FC<SessionImagesModalProps> = ({
     try {
       const res = await chatService.getSessionImage({
         sessionId,
-        driveFileId: meta.drive_file_id,
+        driveFileId: item.drive_file_id,
         connectionId: memoryConnectionId,
       });
 
-      if (res.success && res.file) {
-        setLoadedImageDataUrl(res.file);
+      if (res.success && res.image_content_b64) {
+        let dataUrl = res.image_content_b64.trim();
+        if (!dataUrl.startsWith('data:')) {
+          const mime = res.mime_type || item.mime_type || 'image/jpeg';
+          dataUrl = `data:${mime};base64,${dataUrl}`;
+        }
+        setLoadedImageDataUrl(dataUrl);
       } else {
         setImageError(res.error || '画像の取得に失敗しました。');
       }
@@ -145,7 +150,7 @@ export const SessionImagesModal: React.FC<SessionImagesModalProps> = ({
     if (!loadedImageDataUrl) return;
     onSelectImageForConsultation(
       loadedImageDataUrl,
-      loadedImageMeta?.name || 'session_photo.jpg'
+      loadedImageItem?.name || 'session_photo.jpg'
     );
     onClose();
   };
@@ -243,7 +248,7 @@ export const SessionImagesModal: React.FC<SessionImagesModalProps> = ({
           {/* 左側: 写真一覧リスト */}
           <div className="flex-1 flex flex-col min-h-0 space-y-3">
             <div className="flex items-center justify-between text-xs text-stone-500 dark:text-stone-400 shrink-0">
-              <span>保存済み写真 ({images.length}件)</span>
+              <span>保存済み写真 ({items.length}件)</span>
               <span className="text-[11px]">タップして画像を取得・表示</span>
             </div>
 
@@ -300,7 +305,7 @@ export const SessionImagesModal: React.FC<SessionImagesModalProps> = ({
             )}
 
             {/* 写真が0件の場合 */}
-            {!isLoadingList && !listError && memoryConnectionId && images.length === 0 && (
+            {!isLoadingList && !listError && memoryConnectionId && items.length === 0 && (
               <div className="py-10 px-4 text-center bg-stone-50 dark:bg-stone-850 rounded-2xl border border-dashed border-stone-200 dark:border-stone-800 space-y-2">
                 <div className="w-10 h-10 rounded-full bg-stone-200/70 dark:bg-stone-800 text-stone-500 dark:text-stone-400 flex items-center justify-center mx-auto">
                   <ImageIcon className="w-5 h-5" />
@@ -315,19 +320,20 @@ export const SessionImagesModal: React.FC<SessionImagesModalProps> = ({
             )}
 
             {/* 写真一覧リスト */}
-            {!isLoadingList && images.length > 0 && (
+            {!isLoadingList && items.length > 0 && (
               <div className="space-y-2 overflow-y-auto max-h-72 md:max-h-[380px] pr-1">
-                {images.map((img) => {
-                  const isSelected = selectedFileId === img.drive_file_id;
-                  const kindInfo = getKindBadge(img.image_kind);
-                  const formattedTime = formatDate(img.created_time);
+                {items.map((item) => {
+                  const isSelected = selectedFileId === item.drive_file_id;
+                  const kindInfo = getKindBadge(item.memory_type);
+                  const formattedTime = formatDate(item.created_at || item.updated_at);
+                  const thumbUrl = typeof item.metadata?.thumbnail_url === 'string' ? item.metadata.thumbnail_url : undefined;
 
                   return (
                     <button
-                      key={img.drive_file_id}
+                      key={item.drive_file_id}
                       type="button"
-                      id={`btn-session-image-${img.drive_file_id}`}
-                      onClick={() => handleSelectImage(img)}
+                      id={`btn-session-image-${item.drive_file_id}`}
+                      onClick={() => handleSelectImage(item)}
                       className={`w-full p-3 rounded-2xl border transition-all text-left flex items-center gap-3 cursor-pointer ${
                         isSelected
                           ? 'border-emerald-500 bg-emerald-50/80 dark:bg-emerald-950/60 ring-2 ring-emerald-500/20'
@@ -336,10 +342,10 @@ export const SessionImagesModal: React.FC<SessionImagesModalProps> = ({
                     >
                       {/* アイコンまたはサムネイル */}
                       <div className="w-11 h-11 rounded-xl bg-stone-200 dark:bg-stone-800 flex items-center justify-center shrink-0 overflow-hidden border border-stone-300/50 dark:border-stone-700">
-                        {img.thumbnail_url ? (
+                        {thumbUrl ? (
                           <img
-                            src={img.thumbnail_url}
-                            alt={img.name}
+                            src={thumbUrl}
+                            alt={item.name || '写真'}
                             className="w-full h-full object-cover"
                             onError={(e) => {
                               // サムネイル読み込みエラー時はプレースホルダー
@@ -366,7 +372,7 @@ export const SessionImagesModal: React.FC<SessionImagesModalProps> = ({
                           )}
                         </div>
                         <p className="text-xs font-semibold text-stone-800 dark:text-stone-200 truncate mt-1">
-                          {img.name}
+                          {item.name || '写真'}
                         </p>
                       </div>
 
@@ -412,10 +418,10 @@ export const SessionImagesModal: React.FC<SessionImagesModalProps> = ({
                   <AlertCircle className="w-6 h-6 text-rose-500 mx-auto" />
                   <p className="text-xs text-rose-600 dark:text-rose-400 font-semibold">取得エラー</p>
                   <p className="text-[11px] text-stone-500 dark:text-stone-400">{imageError}</p>
-                  {selectedFileId && loadedImageMeta && (
+                  {selectedFileId && loadedImageItem && (
                     <button
                       type="button"
-                      onClick={() => handleSelectImage(loadedImageMeta)}
+                      onClick={() => handleSelectImage(loadedImageItem)}
                       className="text-xs text-emerald-700 dark:text-emerald-400 font-semibold hover:underline cursor-pointer mt-1"
                     >
                       再取得
@@ -429,13 +435,13 @@ export const SessionImagesModal: React.FC<SessionImagesModalProps> = ({
                   <div className="w-full h-44 rounded-xl overflow-hidden bg-black/5 dark:bg-black/20 flex items-center justify-center">
                     <img
                       src={loadedImageDataUrl}
-                      alt={loadedImageMeta?.name || '選択写真'}
+                      alt={loadedImageItem?.name || '選択写真'}
                       className="w-full h-full object-contain rounded-xl"
                     />
                   </div>
                   <div className="text-center w-full min-w-0">
                     <p className="text-xs font-semibold text-stone-800 dark:text-stone-200 truncate">
-                      {loadedImageMeta?.name}
+                      {loadedImageItem?.name || '選択写真'}
                     </p>
                   </div>
                 </div>
@@ -490,3 +496,4 @@ export const SessionImagesModal: React.FC<SessionImagesModalProps> = ({
     </div>
   );
 };
+
