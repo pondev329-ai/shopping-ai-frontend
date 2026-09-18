@@ -291,6 +291,26 @@ export interface SaveSharedFlyerResult {
 }
 
 /**
+ * Shared Flyer専用削除パラメータ (delete_flyer)
+ * Jinba Memory側の専用オペレーション delete_flyer に渡すパラメータです。
+ * 1つのShared Flyerを論理データとして削除依頼するため、session_idは不要です。
+ */
+export interface DeleteSharedFlyerParams {
+  flyerId: string;
+  connectionId?: string;
+}
+
+/**
+ * Shared Flyer専用削除結果
+ */
+export interface DeleteSharedFlyerResult {
+  success: boolean;
+  flyerId?: string;
+  error?: string;
+  data?: unknown;
+}
+
+/**
  * チラシ情報の表示用モデル
  */
 export interface SharedFlyerItem {

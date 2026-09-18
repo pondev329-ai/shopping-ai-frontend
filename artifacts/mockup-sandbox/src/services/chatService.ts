@@ -13,6 +13,8 @@ import {
   SaveSessionImageResult,
   SaveSharedFlyerParams,
   SaveSharedFlyerResult,
+  DeleteSharedFlyerParams,
+  DeleteSharedFlyerResult,
 } from '../types/memory';
 
 /**
@@ -36,6 +38,7 @@ export interface ChatService {
   getConversationTimeline?(sessionId: string, connectionId?: string): Promise<GetConversationTimelineResult>;
   saveSessionImage?(params: SaveSessionImageParams): Promise<SaveSessionImageResult>;
   saveSharedFlyer?(params: SaveSharedFlyerParams): Promise<SaveSharedFlyerResult>;
+  deleteSharedFlyer?(params: DeleteSharedFlyerParams): Promise<DeleteSharedFlyerResult>;
   listMemoryRom?(params?: ListMemoryRomParams): Promise<ListMemoryRomResult>;
   deleteMemoryRomItem?(params: DeleteMemoryRomParams): Promise<DeleteMemoryRomResult>;
   onMemoryConnectionChange?(callback: (id: string | null) => void): () => void;
@@ -1133,6 +1136,105 @@ export class RenderBackendChatAdapter implements ChatService {
       return {
         success: false,
         error: `通信エラー: ${errMsg}`,
+      };
+    }
+  }
+
+  /**
+   * Jinba Memory専用オペレーション delete_flyer を呼び出し、Shared Flyerを論理データとして削除します。
+   * Flow: Frontend -> Render /memory/flyer/delete -> Memory Flow delete_flyer -> Google Drive
+   * 
+   * 送信仕様:
+   * - op: "delete_flyer"
+   * - payload: { flyer_id: params.flyerId }
+   * - flyer_id: params.flyerId
+   * - session_id は不要
+   * 
+   * Memory側で、Shared Flyerメタデータおよび紐付いたチラシ画像がまとめて削除されます。
+   */
+  async deleteSharedFlyer(params: DeleteSharedFlyerParams): Promise<DeleteSharedFlyerResult> {
+    const activeConnectionId = (params.connectionId ?? this.memoryConnectionId)?.trim();
+    if (!activeConnectionId || activeConnectionId === 'null' || activeConnectionId === 'undefined') {
+      return {
+        success: false,
+        error: 'Google Drive Memoryが未接続です。先にGoogleアカウントを接続してください。',
+      };
+    }
+
+    if (!params.flyerId || !params.flyerId.trim()) {
+      return {
+        success: false,
+        error: '削除対象の flyer_id が指定されていません。',
+      };
+    }
+
+    const flyerId = params.flyerId.trim();
+    const deleteUrl = `${this.baseUrl}/memory/flyer/delete`;
+    const payload: Record<string, unknown> = {
+      memory_connection_id: activeConnectionId,
+      op: 'delete_flyer',
+      payload: {
+        flyer_id: flyerId,
+      },
+      flyer_id: flyerId,
+    };
+
+    try {
+      const response = await fetch(deleteUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        if (response.status === 404) {
+          return {
+            success: false,
+            error:
+              'バックエンドAPI（POST /memory/flyer/delete）が未配備です。Shared Flyer専用削除（delete_flyer）の実行にはRender側（Memory Flow）のエンドポイントが必要です。',
+          };
+        }
+
+        let errorDetail = `HTTP ${response.status}`;
+        try {
+          const errData = await response.json();
+          if (errData.detail || errData.error || errData.message) {
+            errorDetail = errData.detail || errData.error || errData.message;
+          }
+        } catch {
+          try {
+            const errText = await response.text();
+            if (errText) errorDetail = errText;
+          } catch {
+            // ignore
+          }
+        }
+        return {
+          success: false,
+          error: `チラシ削除に失敗しました (${errorDetail})`,
+        };
+      }
+
+      const resData = await response.json().catch(() => ({ ok: true }));
+      if (resData && (resData.ok === false || resData.success === false)) {
+        return {
+          success: false,
+          error: resData.error || resData.message || resData.detail || 'チラシ削除に失敗しました',
+        };
+      }
+
+      return {
+        success: true,
+        flyerId,
+        data: resData,
+      };
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : 'ネットワーク通信エラー';
+      return {
+        success: false,
+        error: `チラシ削除通信エラー: ${errMsg}`,
       };
     }
   }

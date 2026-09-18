@@ -38,6 +38,7 @@ interface FlyerModalProps {
  */
 export interface ProcessedFlyerItem {
   id: string; // チラシ本体の drive_file_id
+  flyer_id: string; // チラシの論理ID (delete_flyer オペレーション用)
   name: string;
   store?: string;
   valid_from?: string;
@@ -219,8 +220,18 @@ export const FlyerModal: React.FC<FlyerModalProps> = ({
           const valid_until = (meta.valid_until as string) || (meta.validUntil as string) || undefined;
           const notes = (meta.notes as string) || (meta.memo as string) || undefined;
 
+          // Jinba Memory の delete_flyer で使用する論理flyer_idを抽出
+          const flyerId =
+            (meta.flyer_id as string) ||
+            (meta.flyerId as string) ||
+            (meta.id as string) ||
+            metaItem.drive_file_id ||
+            metaItem.id ||
+            baseName;
+
           return {
             id: metaItem.drive_file_id || metaItem.id,
+            flyer_id: flyerId,
             name: metaItem.name,
             store,
             valid_from,
@@ -369,10 +380,21 @@ export const FlyerModal: React.FC<FlyerModalProps> = ({
     }
   };
 
-  // チラシ個別削除ハンドラー（チラシ情報本体＋紐付く画像の両方を削除）
+  // チラシ論理データ削除ハンドラー（Jinba Memory 専用オペレーション delete_flyer）
   const handleDeleteFlyer = async (flyer: ProcessedFlyerItem) => {
-    if (!validMemoryConnectionId || !chatService.deleteMemoryRomItem) {
-      setDeleteError('個別削除機能が利用できません。');
+    if (!validMemoryConnectionId) {
+      setDeleteError('Google Drive Memoryが未接続です。先にGoogleアカウントを接続してください。');
+      return;
+    }
+
+    if (!chatService.deleteSharedFlyer) {
+      setDeleteError('チラシ削除機能（delete_flyer）が利用できません。');
+      return;
+    }
+
+    const targetFlyerId = flyer.flyer_id || flyer.id;
+    if (!targetFlyerId) {
+      setDeleteError('削除対象のチラシIDが特定できませんでした。');
       return;
     }
 
@@ -380,37 +402,24 @@ export const FlyerModal: React.FC<FlyerModalProps> = ({
     setDeleteError(null);
 
     try {
-      // 1. チラシ情報本体（JSON）を削除
-      const resMeta = await chatService.deleteMemoryRomItem({
+      // 1つのShared Flyerを1つの論理データとして削除
+      // Flow: Frontend -> Render (delete_flyer, flyer_id) -> Memory Flow delete_flyer -> Google Drive
+      // ※ Memory側でメタデータJSONと紐付く画像の両方をまとめて削除します
+      const res = await chatService.deleteSharedFlyer({
         connectionId: validMemoryConnectionId,
-        driveFileId: flyer.id,
-        itemType: 'shared_flyer',
-        fileName: flyer.name,
+        flyerId: targetFlyerId,
       });
 
-      // 2. 紐付くチラシ画像（shared_flyer_image）も一緒に削除
-      if (flyer.linkedImageDriveFileId && flyer.linkedImageDriveFileId !== flyer.id) {
-        try {
-          await chatService.deleteMemoryRomItem({
-            connectionId: validMemoryConnectionId,
-            driveFileId: flyer.linkedImageDriveFileId,
-            itemType: 'shared_flyer_image',
-            fileName: flyer.linkedImageItem?.name,
-          });
-        } catch (imgErr) {
-          console.warn('チラシ紐付き画像の削除通知 (無視可能):', imgErr);
-        }
-      }
-
-      if (resMeta.success) {
+      if (res.success) {
         const displayName = flyer.store ? `${flyer.store} のチラシ` : flyer.name;
         setDeleteSuccessMessage(`「${displayName}」をGoogle Driveから削除しました`);
         setTimeout(() => setDeleteSuccessMessage(null), 3500);
 
-        // Single Source of Truth に基づき一覧を再取得
+        // 削除成功時のみSingle Source of Truth（Google Drive）から最新一覧を再取得
         await fetchFlyers();
       } else {
-        setDeleteError(resMeta.error || 'チラシの削除に失敗しました。');
+        // 削除失敗時は一覧を維持したまま、削除に失敗したことが分かる表示にする
+        setDeleteError(res.error || 'チラシの削除に失敗しました。');
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : '削除通信エラー';
