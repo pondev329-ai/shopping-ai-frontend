@@ -12,7 +12,6 @@ import {
   Plus,
   Calendar,
   Store,
-  FileText,
   Clock,
   RefreshCw,
   ZoomIn,
@@ -20,7 +19,7 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { ChatService } from '../services/chatService';
-import { MemoryRomItem, SharedFlyerItem } from '../types/memory';
+import { MemoryRomItem } from '../types/memory';
 import { compressImageToDataUrl } from '../utils/imageCompressor';
 
 interface FlyerModalProps {
@@ -30,6 +29,81 @@ interface FlyerModalProps {
   memoryConnectionId: string | null;
   onOpenConnectModal?: () => void;
   onPreviewImage?: (url: string) => void;
+}
+
+/**
+ * 画面上で1チラシ＝1表示として扱うデータ型
+ * Google Drive上の shared_flyer (メタデータJSON) を主とし、
+ * 紐付く shared_flyer_image (画像) をペアリングします。
+ */
+export interface ProcessedFlyerItem {
+  id: string; // チラシ本体の drive_file_id
+  name: string;
+  store?: string;
+  valid_from?: string;
+  valid_until?: string;
+  notes?: string;
+  description?: string;
+  updated_at?: string;
+  size?: string;
+  romItem: MemoryRomItem;
+  // 紐付くチラシ画像の情報
+  linkedImageItem?: MemoryRomItem;
+  linkedImageDriveFileId?: string;
+}
+
+/**
+ * ROMアイテムがチラシ画像（shared_flyer_image）かどうかを判定
+ */
+function isFlyerImageItem(item: MemoryRomItem): boolean {
+  const rawType = (item.raw_type || '').toLowerCase();
+  const name = (item.name || '').toLowerCase();
+  const mimeType = (item.mime_type || '').toLowerCase();
+
+  // raw_type に flyer_image や shared_flyer_image が含まれる
+  if (rawType.includes('flyer_image') || rawType === 'shared_flyer_image') {
+    return true;
+  }
+
+  // flyer または チラシ に関連し、かつ画像拡張子や image/ MIMEタイプを持つ
+  if (
+    (rawType.includes('flyer') || name.includes('flyer') || name.includes('チラシ')) &&
+    (mimeType.startsWith('image/') || /\.(jpe?g|png|webp|gif|bmp|heic)$/i.test(name))
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
+/**
+ * ROMアイテムがチラシ本体情報（shared_flyer）かどうかを判定
+ * ※ チラシ画像は除外します（1チラシ＝1表示の原則）
+ */
+function isFlyerMetadataItem(item: MemoryRomItem): boolean {
+  // 画像ファイルは本体としては扱わない
+  if (isFlyerImageItem(item)) {
+    return false;
+  }
+
+  const rawType = (item.raw_type || '').toLowerCase();
+  const name = (item.name || '').toLowerCase();
+  const itemType = (item.item_type || '').toLowerCase();
+
+  // raw_type が shared_flyer
+  if (rawType === 'shared_flyer' || rawType.includes('shared_flyer')) {
+    return true;
+  }
+
+  // flyer / チラシ に関連する shared_rom または JSON
+  if (
+    (itemType === 'shared_rom' || rawType.includes('flyer') || rawType.includes('shared')) &&
+    (name.includes('flyer') || name.includes('チラシ') || rawType.includes('flyer'))
+  ) {
+    return true;
+  }
+
+  return false;
 }
 
 export const FlyerModal: React.FC<FlyerModalProps> = ({
@@ -43,11 +117,16 @@ export const FlyerModal: React.FC<FlyerModalProps> = ({
   // 画面モード: 'list' (一覧) または 'create' (新規追加)
   const [activeTab, setActiveTab] = useState<'list' | 'create'>('list');
 
-  // チラシ一覧取得用ステート
-  const [romFlyers, setRomFlyers] = useState<MemoryRomItem[]>([]);
-  const [localRegisteredFlyers, setLocalRegisteredFlyers] = useState<SharedFlyerItem[]>([]);
+  // チラシ一覧（Google Driveから取得したデータを唯一のSingle Source of Truthとして管理）
+  const [flyers, setFlyers] = useState<ProcessedFlyerItem[]>([]);
   const [isLoadingList, setIsLoadingList] = useState(false);
   const [listError, setListError] = useState<string | null>(null);
+
+  // 削除処理用ステート
+  const [flyerToDelete, setFlyerToDelete] = useState<ProcessedFlyerItem | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [deleteSuccessMessage, setDeleteSuccessMessage] = useState<string | null>(null);
 
   // チラシ新規登録フォーム用ステート
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
@@ -79,30 +158,10 @@ export const FlyerModal: React.FC<FlyerModalProps> = ({
     return null;
   }, [memoryConnectionId]);
 
-  // モーダルオープン時に一覧を取得
-  useEffect(() => {
-    if (isOpen) {
-      fetchFlyers();
-      setSaveSuccessMessage(null);
-      setSaveErrorMessage(null);
-    } else {
-      // 閉じたときはリセット
-      setSelectedImage(null);
-      setSelectedFilename('');
-      setStoreName('');
-      setValidFrom('');
-      setValidUntil('');
-      setNotes('');
-      setSaveSuccessMessage(null);
-      setSaveErrorMessage(null);
-      setActiveTab('list');
-    }
-  }, [isOpen, validMemoryConnectionId]);
-
-  // Google Drive ROMからチラシ一覧を取得
+  // Google Drive ROMからチラシ一覧を取得し、shared_flyerとshared_flyer_imageを整理
   const fetchFlyers = async () => {
     if (!validMemoryConnectionId || !chatService.listMemoryRom) {
-      setRomFlyers([]);
+      setFlyers([]);
       setIsLoadingList(false);
       return;
     }
@@ -115,20 +174,75 @@ export const FlyerModal: React.FC<FlyerModalProps> = ({
       });
 
       if (res.success && Array.isArray(res.items)) {
-        // Shared Flyer / flyer / チラシ に該当するROMデータを抽出
-        const flyers = res.items.filter((item) => {
-          const itemType = (item.item_type || '').toLowerCase();
-          const rawType = (item.raw_type || '').toLowerCase();
-          const name = (item.name || '').toLowerCase();
-          return (
-            itemType === 'shared_rom' ||
-            rawType.includes('flyer') ||
-            rawType.includes('shared') ||
-            name.includes('flyer') ||
-            name.includes('チラシ')
-          );
+        const metadataItems: MemoryRomItem[] = [];
+        const imageItems: MemoryRomItem[] = [];
+
+        for (const item of res.items) {
+          if (isFlyerImageItem(item)) {
+            imageItems.push(item);
+          } else if (isFlyerMetadataItem(item)) {
+            metadataItems.push(item);
+          }
+        }
+
+        // 各チラシ本体情報に紐付く画像をペアリング（1チラシ＝1表示）
+        const processedList: ProcessedFlyerItem[] = metadataItems.map((metaItem) => {
+          const meta = (metaItem.metadata || {}) as Record<string, unknown>;
+          const baseName = metaItem.name.replace(/\.[^/.]+$/, '').toLowerCase();
+
+          // 1. メタデータ内の明示的な画像ID
+          const metaImageId =
+            (meta.image_file_id as string) ||
+            (meta.image_drive_file_id as string) ||
+            (meta.linked_image_id as string) ||
+            (meta.file_id as string);
+
+          let matchedImage = metaImageId
+            ? imageItems.find((img) => img.drive_file_id === metaImageId || img.id === metaImageId)
+            : undefined;
+
+          // 2. ファイル名の一致（例: flyer_123.json と flyer_123.jpg）
+          if (!matchedImage) {
+            matchedImage = imageItems.find((img) => {
+              const imgBaseName = img.name.replace(/\.[^/.]+$/, '').toLowerCase();
+              return imgBaseName === baseName || (baseName.length > 5 && imgBaseName.includes(baseName));
+            });
+          }
+
+          // メタデータから店舗名や期間を抽出
+          const store =
+            (meta.store as string) ||
+            (meta.store_name as string) ||
+            (meta.shop as string) ||
+            undefined;
+          const valid_from = (meta.valid_from as string) || (meta.validFrom as string) || undefined;
+          const valid_until = (meta.valid_until as string) || (meta.validUntil as string) || undefined;
+          const notes = (meta.notes as string) || (meta.memo as string) || undefined;
+
+          return {
+            id: metaItem.drive_file_id || metaItem.id,
+            name: metaItem.name,
+            store,
+            valid_from,
+            valid_until,
+            notes,
+            description: metaItem.description,
+            updated_at: metaItem.updated_at,
+            size: metaItem.size,
+            romItem: metaItem,
+            linkedImageItem: matchedImage,
+            linkedImageDriveFileId: matchedImage?.drive_file_id || metaImageId || undefined,
+          };
         });
-        setRomFlyers(flyers);
+
+        // 更新日時が新しい順にソート
+        processedList.sort((a, b) => {
+          const timeA = a.updated_at ? new Date(a.updated_at).getTime() : 0;
+          const timeB = b.updated_at ? new Date(b.updated_at).getTime() : 0;
+          return timeB - timeA;
+        });
+
+        setFlyers(processedList);
       } else {
         if (res.error) {
           setListError(res.error);
@@ -141,6 +255,32 @@ export const FlyerModal: React.FC<FlyerModalProps> = ({
       setIsLoadingList(false);
     }
   };
+
+  // モーダルオープン時に一覧を取得
+  useEffect(() => {
+    if (isOpen) {
+      fetchFlyers();
+      setSaveSuccessMessage(null);
+      setSaveErrorMessage(null);
+      setDeleteSuccessMessage(null);
+      setDeleteError(null);
+      setFlyerToDelete(null);
+    } else {
+      // 閉じたときはリセット
+      setSelectedImage(null);
+      setSelectedFilename('');
+      setStoreName('');
+      setValidFrom('');
+      setValidUntil('');
+      setNotes('');
+      setSaveSuccessMessage(null);
+      setSaveErrorMessage(null);
+      setDeleteSuccessMessage(null);
+      setDeleteError(null);
+      setFlyerToDelete(null);
+      setActiveTab('list');
+    }
+  }, [isOpen, validMemoryConnectionId]);
 
   // 写真選択ハンドラー
   const handleImageFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -167,7 +307,7 @@ export const FlyerModal: React.FC<FlyerModalProps> = ({
     }
   };
 
-  // チラシ登録実行ハンドラー
+  // チラシ登録実行ハンドラー（Google Driveのみを正とし、ローカル仮データは作らない）
   const handleSaveFlyer = async () => {
     if (!selectedImage) {
       setSaveErrorMessage('チラシ画像を選択または撮影してください。');
@@ -202,19 +342,6 @@ export const FlyerModal: React.FC<FlyerModalProps> = ({
       if (res.success) {
         setSaveSuccessMessage('Google Driveにチラシを登録しました！');
 
-        // ローカル登録済みリストにも追加して即時反映
-        const newLocalFlyer: SharedFlyerItem = {
-          id: `local-flyer-${Date.now()}`,
-          name: selectedFilename || `チラシ画像 (${new Date().toLocaleDateString()})`,
-          store: storeName.trim() || undefined,
-          valid_from: validFrom || undefined,
-          valid_until: validUntil || undefined,
-          notes: notes.trim() || undefined,
-          updated_at: new Date().toISOString(),
-          imageUrl: selectedImage,
-        };
-        setLocalRegisteredFlyers((prev) => [newLocalFlyer, ...prev]);
-
         // フォームリセット
         setSelectedImage(null);
         setSelectedFilename('');
@@ -223,14 +350,14 @@ export const FlyerModal: React.FC<FlyerModalProps> = ({
         setValidUntil('');
         setNotes('');
 
-        // 一覧を再取得
-        fetchFlyers();
+        // Driveから再取得（Single Source of Truth）
+        await fetchFlyers();
 
-        // 1.5秒後に一覧タブへ遷移
+        // 1秒後に一覧タブへ自動遷移
         setTimeout(() => {
           setActiveTab('list');
           setSaveSuccessMessage(null);
-        }, 1200);
+        }, 1000);
       } else {
         setSaveErrorMessage(res.error || 'チラシの保存に失敗しました。');
       }
@@ -242,10 +369,59 @@ export const FlyerModal: React.FC<FlyerModalProps> = ({
     }
   };
 
-  if (!isOpen) return null;
+  // チラシ個別削除ハンドラー（チラシ情報本体＋紐付く画像の両方を削除）
+  const handleDeleteFlyer = async (flyer: ProcessedFlyerItem) => {
+    if (!validMemoryConnectionId || !chatService.deleteMemoryRomItem) {
+      setDeleteError('個別削除機能が利用できません。');
+      return;
+    }
 
-  // 全チラシ件数（Drive上のROM + 直近登録したローカルチラシ）
-  const totalFlyerCount = romFlyers.length + localRegisteredFlyers.length;
+    setIsDeleting(true);
+    setDeleteError(null);
+
+    try {
+      // 1. チラシ情報本体（JSON）を削除
+      const resMeta = await chatService.deleteMemoryRomItem({
+        connectionId: validMemoryConnectionId,
+        driveFileId: flyer.id,
+        itemType: 'shared_flyer',
+        fileName: flyer.name,
+      });
+
+      // 2. 紐付くチラシ画像（shared_flyer_image）も一緒に削除
+      if (flyer.linkedImageDriveFileId && flyer.linkedImageDriveFileId !== flyer.id) {
+        try {
+          await chatService.deleteMemoryRomItem({
+            connectionId: validMemoryConnectionId,
+            driveFileId: flyer.linkedImageDriveFileId,
+            itemType: 'shared_flyer_image',
+            fileName: flyer.linkedImageItem?.name,
+          });
+        } catch (imgErr) {
+          console.warn('チラシ紐付き画像の削除通知 (無視可能):', imgErr);
+        }
+      }
+
+      if (resMeta.success) {
+        const displayName = flyer.store ? `${flyer.store} のチラシ` : flyer.name;
+        setDeleteSuccessMessage(`「${displayName}」をGoogle Driveから削除しました`);
+        setTimeout(() => setDeleteSuccessMessage(null), 3500);
+
+        // Single Source of Truth に基づき一覧を再取得
+        await fetchFlyers();
+      } else {
+        setDeleteError(resMeta.error || 'チラシの削除に失敗しました。');
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : '削除通信エラー';
+      setDeleteError(msg);
+    } finally {
+      setIsDeleting(false);
+      setFlyerToDelete(null);
+    }
+  };
+
+  if (!isOpen) return null;
 
   return (
     <div
@@ -331,7 +507,7 @@ export const FlyerModal: React.FC<FlyerModalProps> = ({
                   : 'bg-stone-100 dark:bg-stone-800 text-stone-600 dark:text-stone-400'
               }`}
             >
-              {totalFlyerCount}
+              {flyers.length}
             </span>
           </button>
 
@@ -386,7 +562,7 @@ export const FlyerModal: React.FC<FlyerModalProps> = ({
         {/* コンテンツエリア */}
         <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-4 bg-stone-50/50 dark:bg-stone-950/40">
           {/* =========================================================================
-              タブ 1: 登録済みチラシ一覧
+              タブ 1: 登録済みチラシ一覧（1チラシ＝1表示）
              ========================================================================= */}
           {activeTab === 'list' && (
             <div className="space-y-3">
@@ -398,9 +574,31 @@ export const FlyerModal: React.FC<FlyerModalProps> = ({
                 </div>
               </div>
 
-              {/* 再読み込みボタン */}
+              {/* 削除成功通知 */}
+              {deleteSuccessMessage && (
+                <div className="p-3 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-xs text-emerald-800 dark:text-emerald-200 rounded-xl flex items-center gap-2 animate-in fade-in">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                  <span>{deleteSuccessMessage}</span>
+                </div>
+              )}
+
+              {/* 削除エラー通知 */}
+              {deleteError && (
+                <div className="p-3 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-xs text-rose-800 dark:text-rose-200 rounded-xl flex items-center justify-between animate-in fade-in">
+                  <span>{deleteError}</span>
+                  <button
+                    type="button"
+                    onClick={() => setDeleteError(null)}
+                    className="p-1 hover:bg-rose-100 dark:hover:bg-rose-900/60 rounded-md cursor-pointer"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              )}
+
+              {/* 再読み込みボタンと件数 */}
               <div className="flex items-center justify-between text-xs text-stone-500 dark:text-stone-400 px-1">
-                <span>登録済みチラシ: {totalFlyerCount} 件</span>
+                <span>登録済みチラシ: {flyers.length} 件</span>
                 {validMemoryConnectionId && (
                   <button
                     type="button"
@@ -438,7 +636,7 @@ export const FlyerModal: React.FC<FlyerModalProps> = ({
               )}
 
               {/* 0件のときの空表示 */}
-              {!isLoadingList && totalFlyerCount === 0 && (
+              {!isLoadingList && flyers.length === 0 && (
                 <div className="text-center py-10 px-4 bg-white dark:bg-stone-800/50 rounded-2xl border border-dashed border-stone-300 dark:border-stone-700">
                   <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-orange-50 dark:bg-orange-950/60 text-orange-600 dark:text-orange-400 flex items-center justify-center">
                     <Newspaper className="w-6 h-6 stroke-1.5" />
@@ -461,88 +659,102 @@ export const FlyerModal: React.FC<FlyerModalProps> = ({
                 </div>
               )}
 
-              {/* チラシカード一覧 */}
+              {/* チラシカード一覧（1チラシ＝1表示） */}
               <div className="space-y-3">
-                {/* 1. 直近追加されたチラシ（画像プレビュー付き） */}
-                {localRegisteredFlyers.map((flyer) => (
+                {flyers.map((flyer) => (
                   <div
                     key={flyer.id}
-                    className="p-3.5 bg-white dark:bg-stone-800 rounded-2xl border border-orange-200 dark:border-orange-800/80 shadow-2xs flex gap-3 items-start"
+                    className="p-3.5 bg-white dark:bg-stone-800 rounded-2xl border border-stone-200 dark:border-stone-700/80 shadow-2xs flex gap-3 items-start relative group"
                   >
-                    {flyer.imageUrl && (
-                      <div
-                        className="w-20 h-20 rounded-xl overflow-hidden bg-stone-100 dark:bg-stone-700 shrink-0 border border-stone-200 dark:border-stone-700 relative group cursor-pointer"
-                        onClick={() => onPreviewImage && onPreviewImage(flyer.imageUrl || '')}
-                        title="タップして拡大"
-                      >
-                        <img
-                          src={flyer.imageUrl}
-                          alt="チラシプレビュー"
-                          className="w-full h-full object-cover group-hover:scale-105 transition-transform"
-                        />
-                        <div className="absolute inset-0 bg-black/25 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity text-white">
-                          <ZoomIn className="w-4 h-4" />
+                    {/* アイコン */}
+                    <div className="w-10 h-10 rounded-xl bg-orange-50 dark:bg-orange-950/60 text-orange-600 dark:text-orange-400 flex items-center justify-center shrink-0">
+                      <Newspaper className="w-5 h-5" />
+                    </div>
+
+                    {/* 詳細情報 */}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <h4 className="text-xs font-bold text-stone-900 dark:text-stone-100 truncate">
+                            {flyer.store ? `${flyer.store} のチラシ` : flyer.name}
+                          </h4>
+                          {flyer.store && flyer.name !== flyer.store && (
+                            <span className="text-[10px] text-stone-400 dark:text-stone-500 block truncate">
+                              {flyer.name}
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <span className="text-[10px] text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200/60 dark:border-emerald-800/60 px-1.5 py-0.2 rounded font-medium">
+                            Drive保存済み
+                          </span>
+
+                          {/* 削除ボタン */}
+                          <button
+                            type="button"
+                            id={`btn-delete-flyer-${flyer.id}`}
+                            onClick={() => setFlyerToDelete(flyer)}
+                            disabled={isDeleting}
+                            className="p-1.5 text-stone-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/50 rounded-lg transition-colors cursor-pointer"
+                            title="このチラシを削除"
+                            aria-label={`${flyer.name}を削除`}
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
                         </div>
                       </div>
-                    )}
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between gap-1">
-                        <span className="text-xs font-bold text-stone-900 dark:text-stone-100 truncate">
-                          {flyer.store ? `${flyer.store} のチラシ` : flyer.name}
-                        </span>
-                        <span className="text-[10px] text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950 px-1.5 py-0.2 rounded font-medium shrink-0">
-                          Drive保存済み
-                        </span>
-                      </div>
+
+                      {/* 有効期間 */}
                       {(flyer.valid_from || flyer.valid_until) && (
-                        <div className="flex items-center gap-1 text-[11px] text-stone-500 dark:text-stone-400 mt-1">
-                          <Calendar className="w-3 h-3 shrink-0" />
+                        <div className="flex items-center gap-1 text-[11px] text-stone-600 dark:text-stone-300 mt-1.5">
+                          <Calendar className="w-3 h-3 text-orange-500 shrink-0" />
                           <span>
                             {flyer.valid_from || ''} 〜 {flyer.valid_until || ''}
                           </span>
                         </div>
                       )}
+
+                      {/* メモ */}
                       {flyer.notes && (
-                        <p className="text-[11.5px] text-stone-600 dark:text-stone-300 mt-1 line-clamp-2 bg-stone-50 dark:bg-stone-750 p-1.5 rounded-lg">
+                        <p className="text-[11.5px] text-stone-600 dark:text-stone-300 mt-1.5 p-2 bg-stone-50 dark:bg-stone-750/80 rounded-lg border border-stone-150 dark:border-stone-700">
                           {flyer.notes}
                         </p>
                       )}
-                      <div className="flex items-center gap-1 text-[10px] text-stone-400 dark:text-stone-500 mt-1.5">
-                        <Clock className="w-3 h-3" />
-                        <span>{new Date(flyer.updated_at || Date.now()).toLocaleString([], { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
-                      </div>
-                    </div>
-                  </div>
-                ))}
 
-                {/* 2. Google Drive から取得した既存のチラシROM */}
-                {romFlyers.map((item) => (
-                  <div
-                    key={item.id}
-                    className="p-3.5 bg-white dark:bg-stone-800 rounded-2xl border border-stone-200 dark:border-stone-700/80 shadow-2xs flex gap-3 items-start"
-                  >
-                    <div className="w-10 h-10 rounded-xl bg-orange-50 dark:bg-orange-950/60 text-orange-600 dark:text-orange-400 flex items-center justify-center shrink-0">
-                      <Newspaper className="w-5 h-5" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between gap-1">
-                        <span className="text-xs font-bold text-stone-900 dark:text-stone-100 truncate">
-                          {item.name}
-                        </span>
-                        <span className="text-[10px] text-stone-500 dark:text-stone-400 bg-stone-100 dark:bg-stone-700 px-1.5 py-0.2 rounded font-mono shrink-0">
-                          {item.size || 'Shared'}
-                        </span>
-                      </div>
-                      {item.description && (
-                        <p className="text-[11.5px] text-stone-600 dark:text-stone-300 mt-1 line-clamp-2">
-                          {item.description}
+                      {/* 説明 (description) */}
+                      {flyer.description && !flyer.notes && (
+                        <p className="text-[11px] text-stone-500 dark:text-stone-400 mt-1 line-clamp-2">
+                          {flyer.description}
                         </p>
                       )}
-                      <div className="flex items-center justify-between text-[10px] text-stone-400 dark:text-stone-500 mt-1.5">
-                        <span className="font-mono">
-                          ID: {item.drive_file_id ? `${item.drive_file_id.slice(0, 8)}...` : item.id.slice(0, 8)}
-                        </span>
-                        <span>{item.updated_at ? new Date(item.updated_at).toLocaleDateString() : ''}</span>
+
+                      {/* 紐付き画像・ファイル情報バッジ */}
+                      <div className="flex items-center justify-between text-[10px] text-stone-400 dark:text-stone-500 mt-2 pt-1 border-t border-stone-100 dark:border-stone-750">
+                        <div className="flex items-center gap-1.5">
+                          {flyer.linkedImageDriveFileId ? (
+                            <span className="inline-flex items-center gap-1 text-orange-600 dark:text-orange-400">
+                              <ImageIcon className="w-3 h-3" />
+                              <span>チラシ画像あり</span>
+                            </span>
+                          ) : (
+                            <span>画像なし（情報のみ）</span>
+                          )}
+                        </div>
+
+                        <div className="flex items-center gap-1">
+                          <Clock className="w-3 h-3" />
+                          <span>
+                            {flyer.updated_at
+                              ? new Date(flyer.updated_at).toLocaleDateString([], {
+                                  month: 'numeric',
+                                  day: 'numeric',
+                                  hour: '2-digit',
+                                  minute: '2-digit',
+                                })
+                              : ''}
+                          </span>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -802,6 +1014,77 @@ export const FlyerModal: React.FC<FlyerModalProps> = ({
           )}
         </div>
 
+        {/* 削除確認ダイアログ (Flyer Delete Confirmation Modal) */}
+        {flyerToDelete && (
+          <div
+            id="flyer-delete-confirm-backdrop"
+            className="fixed inset-0 z-60 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-100"
+            onClick={() => !isDeleting && setFlyerToDelete(null)}
+          >
+            <div
+              id="flyer-delete-confirm-box"
+              className="w-full max-w-sm bg-white dark:bg-stone-900 rounded-2xl border border-stone-200 dark:border-stone-800 p-5 shadow-2xl space-y-4 animate-in zoom-in-95 duration-150"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center gap-3 text-rose-600 dark:text-rose-400">
+                <div className="w-10 h-10 rounded-full bg-rose-100 dark:bg-rose-950/80 flex items-center justify-center shrink-0">
+                  <Trash2 className="w-5 h-5" />
+                </div>
+                <div>
+                  <h4 className="text-sm font-bold text-stone-900 dark:text-stone-100">
+                    チラシを削除しますか？
+                  </h4>
+                  <p className="text-xs text-stone-500 dark:text-stone-400 mt-0.5">
+                    Google Driveから完全に削除されます
+                  </p>
+                </div>
+              </div>
+
+              <div className="p-3 bg-stone-50 dark:bg-stone-800/60 rounded-xl border border-stone-200 dark:border-stone-700 text-xs space-y-1">
+                <div className="font-bold text-stone-800 dark:text-stone-200">
+                  {flyerToDelete.store ? `${flyerToDelete.store} のチラシ` : flyerToDelete.name}
+                </div>
+                {flyerToDelete.linkedImageDriveFileId && (
+                  <div className="text-[11px] text-stone-500 dark:text-stone-400">
+                    ※ 紐付いているチラシ画像も一緒に削除されます
+                  </div>
+                )}
+              </div>
+
+              <div className="flex items-center gap-2.5 pt-1">
+                <button
+                  type="button"
+                  id="btn-cancel-delete-flyer"
+                  onClick={() => setFlyerToDelete(null)}
+                  disabled={isDeleting}
+                  className="flex-1 py-2.5 text-xs font-medium text-stone-700 dark:text-stone-300 bg-stone-100 dark:bg-stone-800 hover:bg-stone-200 dark:hover:bg-stone-700 rounded-xl transition-colors cursor-pointer"
+                >
+                  キャンセル
+                </button>
+                <button
+                  type="button"
+                  id="btn-confirm-delete-flyer"
+                  onClick={() => handleDeleteFlyer(flyerToDelete)}
+                  disabled={isDeleting}
+                  className="flex-1 py-2.5 text-xs font-semibold text-white bg-rose-600 hover:bg-rose-700 active:bg-rose-800 rounded-xl shadow-xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
+                >
+                  {isDeleting ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <span>削除中...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Trash2 className="w-3.5 h-3.5" />
+                      <span>削除する</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* フッター */}
         <div className="p-3.5 bg-white dark:bg-stone-900 border-t border-stone-200 dark:border-stone-800 flex items-center justify-between shrink-0">
           <div className="flex items-center gap-1.5 text-[11px] text-stone-500 dark:text-stone-400">
@@ -821,3 +1104,4 @@ export const FlyerModal: React.FC<FlyerModalProps> = ({
     </div>
   );
 };
+
