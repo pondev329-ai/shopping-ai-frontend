@@ -255,6 +255,48 @@ export interface GetConversationTimelineResult {
  * 写真をGoogle Drive Memory (Session Image) へ保存するパラメータと結果
  * (Render POST /memory/image/put 経由)
  */
+export interface ListSessionImagesParams {
+  sessionId: string;
+  connectionId?: string;
+}
+
+export interface SessionImageItem {
+  drive_file_id: string;
+  name?: string;
+  mime_type?: string;
+  session_id?: string;
+  event_id?: string;
+  memory_type?: string;
+  created_at?: string;
+  updated_at?: string;
+  size?: number | string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface ListSessionImagesResult {
+  success: boolean;
+  items: SessionImageItem[];
+  error?: string;
+}
+
+export interface GetSessionImageParams {
+  sessionId: string;
+  driveFileId: string;
+  connectionId?: string;
+}
+
+export interface GetSessionImageResult {
+  success: boolean;
+  drive_file_id?: string;
+  name?: string;
+  mime_type?: string;
+  session_id?: string;
+  event_id?: string;
+  memory_type?: string;
+  image_content_b64?: string;
+  error?: string;
+}
+
 export interface SaveSessionImageParams {
   sessionId: string;
   file: string; // Base64 または Data URL (data:image/jpeg;base64,...)
