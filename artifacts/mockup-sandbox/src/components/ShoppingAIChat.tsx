@@ -397,7 +397,7 @@ export const ShoppingAIChat: React.FC<ShoppingAIChatProps> = ({
 
     const messageContent =
       textToSend ||
-      'スーパーで見つけた写真です（商品・値札・特売シール・食材など）。現在の会話や候補と合わせて、判断材料としてどう考えるべきか教えてください。';
+      'スーパーで見つけた商品・食材の写真です。現在の会話や候補と合わせて判断材料として教えてください。';
 
     const userMessage: ChatMessage = {
       id: `msg-${Date.now()}-user`,

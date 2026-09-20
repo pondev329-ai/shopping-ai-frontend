@@ -1560,8 +1560,8 @@ export class RenderBackendChatAdapter implements ChatService {
 
   async sendMessage(history: ChatMessage[], userText: string, imageUrl?: string, sessionId?: string): Promise<ChatResponse> {
     const text = userText.trim();
-    // 写真付きでテキストが空の場合は、コンテキスト意図を明示したプロンプトを設定
-    const messageToSend = text || (imageUrl ? 'スーパーで見つけた商品・値札・特売・食材の写真です。現在の会話や候補と合わせて判断材料として教えてください。' : '');
+    // 写真付きでテキストが空の場合は、通常の商品・食材写真としてMain Flowへ送信（チラシ意図ワードを含めない）
+    const messageToSend = text || (imageUrl ? 'スーパーで見つけた商品・食材の写真です。現在の会話や候補と合わせて判断材料として教えてください。' : '');
 
     const payload: {
       message: string;
