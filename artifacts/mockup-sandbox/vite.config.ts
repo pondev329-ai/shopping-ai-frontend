@@ -6,6 +6,15 @@ import path from "path";
 const port = 3000;
 const basePath = process.env.BASE_PATH || "./";
 
+const apiProxy = {
+  "/api/render-backend": {
+    target: "https://shopping-ai-jinba-dev.onrender.com",
+    changeOrigin: true,
+    rewrite: (path: string) => path.replace(/^\/api\/render-backend/, ""),
+    secure: false,
+  },
+};
+
 export default defineConfig({
   base: basePath,
   plugins: [
@@ -29,19 +38,13 @@ export default defineConfig({
     fs: {
       strict: false,
     },
-    proxy: {
-      "/api/render-backend": {
-        target: "https://shopping-ai-jinba-dev.onrender.com",
-        changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/api\/render-backend/, ""),
-        secure: false,
-      },
-    },
+    proxy: apiProxy,
   },
   preview: {
     port,
     host: "0.0.0.0",
     allowedHosts: true,
+    proxy: apiProxy,
   },
 });
 
