@@ -270,8 +270,8 @@ export const CompanionSceneStage: React.FC<CompanionSceneStageProps> = ({
 
           {/* 木目のダイニングテーブル（横長全面に広がる） */}
           <div className="absolute bottom-0 left-0 right-0 h-22 sm:h-26 bg-gradient-to-t from-[#c29671] via-[#d4a984] to-[#deb592] border-t-3 border-[#ad7f58] shadow-md">
-            {/* テーブル上の献立メモ */}
-            <div className="absolute top-2 left-32 sm:left-44 w-18 h-14 bg-amber-50 rounded shadow-xs border border-stone-300 -rotate-3 p-1.5 flex flex-col justify-between">
+            {/* テーブル上の献立メモ（ポコ太の右脇に配置） */}
+            <div className="absolute top-2 left-38 sm:left-48 w-18 h-14 bg-amber-50 rounded shadow-xs border border-stone-300 -rotate-3 p-1.5 flex flex-col justify-between">
               <span className="text-[8px] font-bold text-stone-600 border-b border-stone-200 pb-0.5">📖 メモ</span>
               <div className="space-y-0.5">
                 <div className="w-12 h-0.5 bg-stone-300 rounded" />
@@ -281,7 +281,7 @@ export const CompanionSceneStage: React.FC<CompanionSceneStageProps> = ({
             </div>
 
             {/* マグカップ */}
-            <div className="absolute top-2 left-54 sm:left-68 flex flex-col items-center">
+            <div className="absolute top-2 left-60 sm:left-72 flex flex-col items-center">
               <div className="w-0.5 h-2.5 bg-white/60 rounded-full blur-[0.5px] animate-pulse" />
               <div className="w-6 h-7 rounded-b-lg bg-teal-600 border border-teal-700 shadow-xs relative">
                 <div className="absolute -right-1.5 top-1.5 w-2 h-3.5 rounded-r-full border border-teal-700" />
@@ -302,12 +302,12 @@ export const CompanionSceneStage: React.FC<CompanionSceneStageProps> = ({
           </div>
 
           {/* 特売POPバナー */}
-          <div className="absolute top-5 left-32 sm:left-40 px-2.5 py-0.5 bg-red-600 text-yellow-300 font-extrabold text-[10px] sm:text-xs rounded shadow-xs -rotate-3 border border-yellow-300 tracking-wider z-0">
+          <div className="absolute top-5 left-38 sm:left-48 px-2.5 py-0.5 bg-red-600 text-yellow-300 font-extrabold text-[10px] sm:text-xs rounded shadow-xs -rotate-3 border border-yellow-300 tracking-wider z-0">
             ★ 本日特売市 ★
           </div>
 
           {/* 陳列棚（中央から右端まで広がり、Statusの背後にも透けて見える） */}
-          <div className="absolute top-10 sm:top-12 left-32 sm:left-40 right-4 sm:right-6 h-18 sm:h-22 bg-white/75 dark:bg-stone-900/60 rounded-lg border border-emerald-300/70 shadow-xs p-1.5 flex flex-col justify-between">
+          <div className="absolute top-10 sm:top-12 left-38 sm:left-48 right-4 sm:right-6 h-18 sm:h-22 bg-white/75 dark:bg-stone-900/60 rounded-lg border border-emerald-300/70 shadow-xs p-1.5 flex flex-col justify-between">
             <div className="flex items-center justify-between px-1 text-[9px] sm:text-[10px] font-bold text-emerald-800 dark:text-emerald-300 border-b border-stone-200 dark:border-stone-750">
               <span>新鮮野菜・青果コーナー</span>
               <span className="text-stone-500 dark:text-stone-400 font-normal">産地直送品</span>
@@ -330,8 +330,8 @@ export const CompanionSceneStage: React.FC<CompanionSceneStageProps> = ({
           {/* 通路の床 */}
           <div className="absolute bottom-0 left-0 right-0 h-22 sm:h-26 bg-gradient-to-t from-[#c6e6d4] to-[#dcf4e5] border-t-2 border-emerald-400/60">
             <div className="w-full h-full opacity-30 bg-[radial-gradient(#059669_1px,transparent_1px)] [background-size:14px_14px]" />
-            {/* 買い物カゴ */}
-            <div className="absolute bottom-2 left-32 sm:left-40 w-13 h-10 bg-red-500/90 rounded-b-lg border border-red-700 shadow-xs flex items-center justify-center">
+            {/* 買い物カゴ（ポコ太の足元脇） */}
+            <div className="absolute bottom-2 left-38 sm:left-48 w-13 h-10 bg-red-500/90 rounded-b-lg border border-red-700 shadow-xs flex items-center justify-center">
               <div className="w-9 h-6 border border-white/50 rounded flex flex-col justify-around">
                 <div className="h-0.5 bg-white/60" />
               </div>
@@ -348,7 +348,7 @@ export const CompanionSceneStage: React.FC<CompanionSceneStageProps> = ({
           <div className="absolute inset-0 opacity-15 bg-[linear-gradient(to_right,#b45309_1px,transparent_1px),linear-gradient(to_bottom,#b45309_1px,transparent_1px)] [background-size:20px_20px]" />
 
           {/* 調理器具ラック（Statusの背後まで伸びる） */}
-          <div className="absolute top-5 left-30 sm:left-40 right-4 sm:right-8 h-0.5 bg-stone-500 rounded flex items-center justify-around">
+          <div className="absolute top-5 left-36 sm:left-48 right-4 sm:right-8 h-0.5 bg-stone-500 rounded flex items-center justify-around">
             <div className="w-3 h-5 rounded-b-full bg-stone-700" title="おたま" />
             <div className="w-2.5 h-6 rounded-b-sm bg-amber-800" title="木べら" />
             <div className="w-3.5 h-5 rounded-b-full border border-stone-600" title="フライ返し" />
@@ -357,7 +357,7 @@ export const CompanionSceneStage: React.FC<CompanionSceneStageProps> = ({
           {/* 調理台カウンター */}
           <div className="absolute bottom-0 left-0 right-0 h-22 sm:h-26 bg-gradient-to-t from-[#e2e8f0] via-[#f1f5f9] to-[#ffffff] border-t-3 border-stone-300 shadow-md">
             {/* まな板 */}
-            <div className="absolute top-2 left-32 sm:left-40 w-20 h-13 bg-[#fed7aa] rounded border border-[#ea580c]/30 shadow-xs rotate-1 p-1">
+            <div className="absolute top-2 left-38 sm:left-48 w-20 h-13 bg-[#fed7aa] rounded border border-[#ea580c]/30 shadow-xs rotate-1 p-1">
               <div className="flex items-center gap-1.5">
                 <span className="text-sm">🥕</span>
                 <span className="text-xs">🧅</span>
@@ -366,7 +366,7 @@ export const CompanionSceneStage: React.FC<CompanionSceneStageProps> = ({
             </div>
 
             {/* クラフト紙袋（ネギ・フランスパン） */}
-            <div className="absolute top-1.5 left-56 sm:left-68 w-13 h-18 bg-[#d97706] rounded-b shadow-sm border border-[#b45309] p-1">
+            <div className="absolute top-1.5 left-60 sm:left-74 w-13 h-18 bg-[#d97706] rounded-b shadow-sm border border-[#b45309] p-1">
               <div className="absolute -top-5 left-1 text-lg drop-shadow-xs -rotate-12">🥖</div>
               <div className="absolute -top-6 right-1 text-lg drop-shadow-xs rotate-6">🥬</div>
             </div>
@@ -375,13 +375,13 @@ export const CompanionSceneStage: React.FC<CompanionSceneStageProps> = ({
       )}
 
       {/* ============================================================ */}
-      {/* 2. 左側：ボコ太（現在のシーン世界の中に立つアシスタント） */}
+      {/* 2. 左側：ポコ太（現在のシーン世界の中に立つアシスタント） */}
       {/* ============================================================ */}
       <div
         id="scene-character-container"
-        className="absolute bottom-0 left-2 sm:left-5 z-10 flex flex-col items-center pointer-events-auto select-none"
+        className="absolute bottom-0 left-1.5 sm:left-4 z-10 flex flex-col items-center pointer-events-auto select-none"
       >
-        {/* 考え中エフェクト（ボコ太の頭上にふわっと浮かぶ） */}
+        {/* 考え中エフェクト（ポコ太の頭上にふわっと浮かぶ） */}
         {isTyping && (
           <div className="mb-1 z-20 flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-white/95 dark:bg-stone-900/95 backdrop-blur-md shadow-md border border-emerald-400 dark:border-emerald-600 text-[10px] sm:text-xs font-bold text-emerald-800 dark:text-emerald-300 animate-bounce whitespace-nowrap">
             <Sparkles className="w-3 h-3 text-emerald-600 dark:text-emerald-400 animate-spin" />
@@ -389,8 +389,8 @@ export const CompanionSceneStage: React.FC<CompanionSceneStageProps> = ({
           </div>
         )}
 
-        {/* ボコ太 SVGキャラクター（シーン拡大に合わせて大きく存在感アップ） */}
-        <div className="relative w-28 h-38 sm:w-34 sm:h-46 md:w-38 md:h-52 drop-shadow-md transition-transform hover:scale-[1.02]">
+        {/* ポコ太 SVGキャラクター（シーン左側で主役として十分認識できる大きさ） */}
+        <div className="relative w-36 h-48 sm:w-44 sm:h-58 md:w-50 md:h-66 drop-shadow-md transition-transform hover:scale-[1.02]">
           <svg
             viewBox="0 0 160 220"
             className="w-full h-full"
@@ -525,11 +525,11 @@ export const CompanionSceneStage: React.FC<CompanionSceneStageProps> = ({
           </svg>
         </div>
 
-        {/* ボコ太のネームタグ */}
-        <div className="-mt-1 mb-1 px-2 py-0.2 rounded-full bg-white/95 dark:bg-stone-900/95 backdrop-blur-xs border border-stone-200/90 dark:border-stone-700 shadow-2xs text-[10px] font-bold text-stone-800 dark:text-stone-100 flex items-center gap-1">
-          <span>ボコ太</span>
+        {/* ポコ太のネームタグ */}
+        <div className="-mt-1 mb-1 px-2.5 py-0.5 rounded-full bg-white/95 dark:bg-stone-900/95 backdrop-blur-xs border border-stone-200/90 dark:border-stone-700 shadow-2xs text-[11px] font-bold text-stone-800 dark:text-stone-100 flex items-center gap-1">
+          <span>ポコ太</span>
           {expertMeta && (
-            <span className="text-[9px] text-emerald-700 dark:text-emerald-400 font-semibold">
+            <span className="text-[9.5px] text-emerald-700 dark:text-emerald-400 font-semibold">
               · {expertMeta.label}
             </span>
           )}
