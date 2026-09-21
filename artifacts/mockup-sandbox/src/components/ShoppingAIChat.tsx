@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import {
   Send,
+  ArrowUp,
   Sparkles,
   ChevronRight,
   HardDrive,
@@ -116,6 +117,7 @@ export const ShoppingAIChat: React.FC<ShoppingAIChatProps> = ({
   const [showPhotoSheet, setShowPhotoSheet] = useState(false);
   const [previewModalImage, setPreviewModalImage] = useState<string | null>(null);
   const [photoError, setPhotoError] = useState<string | null>(null);
+  const [showPlusMenu, setShowPlusMenu] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -192,11 +194,13 @@ export const ShoppingAIChat: React.FC<ShoppingAIChatProps> = ({
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [conversationRecord, isTyping]);
 
-  // テキストエリア自動伸縮
+  // テキストエリア自動伸縮（ChatGPTスタイル：文字入力時のみ必要な分だけ縦に伸長、空の時は1行に戻る）
   useEffect(() => {
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
-      textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 120)}px`;
+      if (input.trim()) {
+        textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 140)}px`;
+      }
     }
   }, [input]);
 
@@ -753,11 +757,11 @@ export const ShoppingAIChat: React.FC<ShoppingAIChatProps> = ({
         </div>
       </header>
 
-      {/* 2. メイン画面の主役：現在のシーン＋キャラクター（画面上部の世界領域） */}
+      {/* 2. メイン画面の横長シーン領域（背景＋左にボコ太＋右にStatus） */}
       <section
         id="stage-scene-main"
         aria-label="現在のシーンとキャラクター"
-        className="shrink-0 p-2 sm:p-3 bg-stone-100/90 dark:bg-stone-900/90 border-b border-stone-200 dark:border-stone-800 transition-colors"
+        className="shrink-0 px-2.5 py-2 sm:px-3.5 sm:py-2.5 bg-stone-100/90 dark:bg-stone-900/90 border-b border-stone-200 dark:border-stone-800 transition-colors"
       >
         <CompanionSceneStage
           scene={activeSession.currentScene || 'planning'}
@@ -768,7 +772,7 @@ export const ShoppingAIChat: React.FC<ShoppingAIChatProps> = ({
         />
       </section>
 
-      {/* 3. Shopping AIの返信 & 対話領域 */}
+      {/* 3. Shopping AIの返信 & 対話領域（十分な面積を確保） */}
       <section
         id="stage-lower-dialogue"
         aria-label="Shopping AIの返信と対話"
@@ -777,7 +781,7 @@ export const ShoppingAIChat: React.FC<ShoppingAIChatProps> = ({
         {/* チャットメッセージ表示部 */}
         <main
           id="chat-messages-container"
-          className="flex-1 overflow-y-auto p-2 sm:p-4 space-y-3 overscroll-contain bg-stone-50/40 dark:bg-stone-950/40 transition-colors"
+          className="flex-1 overflow-y-auto p-2.5 sm:p-4 space-y-3 overscroll-contain bg-stone-50/40 dark:bg-stone-950/40 transition-colors"
         >
           {/* 直近の対話メッセージ表示 */}
           {recentDisplayMessages.map((msg) => (
@@ -786,14 +790,14 @@ export const ShoppingAIChat: React.FC<ShoppingAIChatProps> = ({
               id={`message-row-${msg.id}`}
               className={`flex flex-col w-full ${msg.role === 'user' ? 'items-end' : 'items-start'}`}
             >
-              {/* アシスタント発話ヘッダー（世界領域から分離された会話としての存在） */}
+              {/* アシスタント発話ヘッダー */}
               {msg.role === 'assistant' && (
                 <div className="flex items-center gap-1.5 mb-1 pl-1">
                   <div className="w-5 h-5 rounded-full bg-emerald-600 text-white flex items-center justify-center text-[10px] font-bold shadow-2xs shrink-0">
-                    ポ
+                    ボ
                   </div>
                   <span className="text-xs font-bold text-stone-800 dark:text-stone-200">
-                    ポコ太
+                    ボコ太
                   </span>
                   {activeSession.expertMode && (
                     <span className="text-[10px] bg-purple-100 dark:bg-purple-950/80 text-purple-800 dark:text-purple-300 px-1.5 py-0.2 rounded font-semibold border border-purple-200 dark:border-purple-800">
@@ -1000,8 +1004,8 @@ export const ShoppingAIChat: React.FC<ShoppingAIChatProps> = ({
         <div ref={messagesEndRef} />
       </main>
 
-      {/* 5. Input Form (Mobile Optimized) */}
-      <footer id="chat-input-footer" className="p-3 bg-white dark:bg-stone-900 border-t border-stone-200 dark:border-stone-800 shrink-0 transition-colors">
+      {/* 5. Input Form (ChatGPTスタイル: 通常時は ＋ メッセージ… 📷 ↑ のコンパクトな1行) */}
+      <footer id="chat-input-footer" className="p-2 sm:p-2.5 bg-white dark:bg-stone-900 border-t border-stone-200 dark:border-stone-800 shrink-0 transition-colors relative">
         {/* 隠し input 要素（カメラ撮影用 & アルバム選択用） */}
         <input
           ref={cameraInputRef}
@@ -1021,79 +1025,66 @@ export const ShoppingAIChat: React.FC<ShoppingAIChatProps> = ({
           onChange={handleFileChange}
         />
 
-        {/* 写真最適化中ローダー */}
-        {isProcessingPhoto && (
-          <div className="mb-2 p-2 bg-stone-100 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 rounded-xl flex items-center gap-2 text-xs text-stone-600 dark:text-stone-300 animate-in fade-in duration-100">
-            <Loader2 className="w-4 h-4 animate-spin text-emerald-600 dark:text-emerald-400 shrink-0" />
-            <span>写真を準備中...</span>
-          </div>
-        )}
-
-        {/* 写真エラー表示 */}
-        {photoError && (
-          <div className="mb-2 p-2 bg-rose-50 dark:bg-rose-950/70 border border-rose-200 dark:border-rose-800 rounded-xl flex items-center justify-between gap-2 text-xs text-rose-700 dark:text-rose-300 animate-in fade-in duration-100">
-            <span>{photoError}</span>
+        {/* ＋ アクションメニュー（ポップオーバー） */}
+        {showPlusMenu && (
+          <div
+            id="plus-action-menu"
+            className="absolute bottom-full left-2 sm:left-3 mb-2 w-64 bg-white dark:bg-stone-850 rounded-2xl border border-stone-200 dark:border-stone-700 shadow-xl p-1.5 z-30 animate-in fade-in slide-in-from-bottom-2 duration-150"
+          >
+            <div className="text-[10px] font-bold text-stone-400 dark:text-stone-500 px-2.5 py-1">
+              アクション
+            </div>
             <button
               type="button"
-              onClick={() => setPhotoError(null)}
-              className="p-1 text-rose-500 hover:text-rose-800 dark:text-rose-400 dark:hover:text-rose-200 rounded-full cursor-pointer"
+              onClick={() => {
+                setShowPlusMenu(false);
+                setShowPhotoSheet(true);
+              }}
+              className="w-full flex items-center gap-2.5 px-2.5 py-2 text-xs font-medium text-stone-700 dark:text-stone-200 hover:bg-emerald-50 dark:hover:bg-emerald-950/60 rounded-xl transition-colors text-left cursor-pointer"
             >
-              <X className="w-3.5 h-3.5" />
+              <Camera className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+              <span>写真で相談（カメラ・アルバム）</span>
             </button>
-          </div>
-        )}
-
-        {/* 選択中写真プレビューバナー */}
-        {selectedImage && (
-          <div className="mb-2.5 p-2 bg-emerald-50/90 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 rounded-2xl flex items-center gap-3 animate-in fade-in slide-in-from-bottom-2 duration-150">
-            <div className="relative shrink-0 w-12 h-12 rounded-xl overflow-hidden border border-emerald-300 dark:border-emerald-700 shadow-2xs bg-stone-100 dark:bg-stone-800">
-              <img
-                src={selectedImage}
-                alt="選択中の相談写真"
-                className="w-full h-full object-cover cursor-pointer hover:opacity-90 transition-opacity"
-                onClick={() => setPreviewModalImage(selectedImage)}
-              />
-              <button
-                type="button"
-                id="btn-remove-selected-photo"
-                onClick={() => {
-                  setSelectedImage(null);
-                  setSelectedImageFilename(null);
-                }}
-                className="absolute top-0.5 right-0.5 w-4 h-4 bg-black/75 text-white rounded-full flex items-center justify-center hover:bg-black transition-colors cursor-pointer"
-                title="写真を解除"
-                aria-label="写真を解除"
-              >
-                <X className="w-3 h-3" />
-              </button>
+            <button
+              type="button"
+              onClick={() => {
+                setShowPlusMenu(false);
+                setShowFlyerModal(true);
+              }}
+              className="w-full flex items-center gap-2.5 px-2.5 py-2 text-xs font-medium text-stone-700 dark:text-stone-200 hover:bg-emerald-50 dark:hover:bg-emerald-950/60 rounded-xl transition-colors text-left cursor-pointer"
+            >
+              <Newspaper className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
+              <span>特売チラシを見る・登録</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setShowPlusMenu(false);
+                setShowConversationReview(true);
+              }}
+              className="w-full flex items-center gap-2.5 px-2.5 py-2 text-xs font-medium text-stone-700 dark:text-stone-200 hover:bg-emerald-50 dark:hover:bg-emerald-950/60 rounded-xl transition-colors text-left cursor-pointer"
+            >
+              <History className="w-4 h-4 text-purple-600 dark:text-purple-400 shrink-0" />
+              <span>対話履歴を確認</span>
+            </button>
+            <div className="border-t border-stone-100 dark:border-stone-750 my-1" />
+            <div className="text-[10px] font-bold text-stone-400 dark:text-stone-500 px-2.5 py-1">
+              よくある質問
             </div>
-            <div className="flex-1 min-w-0">
-              <div className="text-xs font-semibold text-emerald-950 dark:text-emerald-200 flex items-center gap-1">
-                <Camera className="w-3.5 h-3.5 text-emerald-700 dark:text-emerald-400 shrink-0" />
-                写真を追加しました
-              </div>
-              <p className="text-[11px] text-emerald-800/80 dark:text-emerald-300/80 truncate mt-0.5">
-                {input.trim() ? '入力内容と合わせて相談します' : 'このまま送信、または質問を入力できます'}
-              </p>
-            </div>
-          </div>
-        )}
-
-        {/* 写真選択時のクイック質問候補 */}
-        {selectedImage && !input.trim() && (
-          <div className="mb-2 flex items-center gap-1.5 overflow-x-auto pb-1 text-xs">
-            <span className="text-[11px] text-stone-500 dark:text-stone-400 shrink-0 font-medium pl-0.5">質問例:</span>
             {[
-              'この値札・特売どう？',
               '今の候補と比べてどっちがいい？',
               '今日中に使い切るなら買い？',
-              '何が作れる？',
+              'おすすめの副菜を教えて',
             ].map((suggestText) => (
               <button
                 key={suggestText}
                 type="button"
-                onClick={() => setInput(suggestText)}
-                className="shrink-0 px-2.5 py-1 bg-white dark:bg-stone-800 border border-stone-200 dark:border-stone-700 hover:border-emerald-500 dark:hover:border-emerald-400 text-stone-700 dark:text-stone-200 hover:text-emerald-700 dark:hover:text-emerald-300 rounded-full text-[11px] transition-colors cursor-pointer whitespace-nowrap active:scale-95"
+                onClick={() => {
+                  setInput(suggestText);
+                  setShowPlusMenu(false);
+                  if (textareaRef.current) textareaRef.current.focus();
+                }}
+                className="w-full px-2.5 py-1.5 text-[11px] text-stone-600 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800 rounded-lg transition-colors text-left truncate cursor-pointer"
               >
                 {suggestText}
               </button>
@@ -1101,55 +1092,130 @@ export const ShoppingAIChat: React.FC<ShoppingAIChatProps> = ({
           </div>
         )}
 
+        {/* 写真最適化中ローダー */}
+        {isProcessingPhoto && (
+          <div className="mb-1.5 p-1.5 bg-stone-100 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 rounded-xl flex items-center gap-2 text-xs text-stone-600 dark:text-stone-300 animate-in fade-in duration-100">
+            <Loader2 className="w-3.5 h-3.5 animate-spin text-emerald-600 dark:text-emerald-400 shrink-0" />
+            <span className="text-[11px]">写真を準備中...</span>
+          </div>
+        )}
+
+        {/* 写真エラー表示 */}
+        {photoError && (
+          <div className="mb-1.5 p-1.5 bg-rose-50 dark:bg-rose-950/70 border border-rose-200 dark:border-rose-800 rounded-xl flex items-center justify-between gap-2 text-xs text-rose-700 dark:text-rose-300 animate-in fade-in duration-100">
+            <span className="text-[11px]">{photoError}</span>
+            <button
+              type="button"
+              onClick={() => setPhotoError(null)}
+              className="p-0.5 text-rose-500 hover:text-rose-800 dark:text-rose-400 dark:hover:text-rose-200 rounded-full cursor-pointer"
+            >
+              <X className="w-3 h-3" />
+            </button>
+          </div>
+        )}
+
+        {/* 写真選択時のみ表示されるスリムな添付バナー */}
+        {selectedImage && (
+          <div className="mb-1.5 px-2.5 py-1 bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 rounded-xl flex items-center justify-between gap-2 animate-in fade-in slide-in-from-bottom-1 duration-150">
+            <div className="flex items-center gap-2 min-w-0">
+              <img
+                src={selectedImage}
+                alt="選択中の相談写真"
+                className="w-6 h-6 rounded-md object-cover border border-emerald-300 dark:border-emerald-700 cursor-pointer shrink-0"
+                onClick={() => setPreviewModalImage(selectedImage)}
+              />
+              <span className="text-[11px] font-medium text-emerald-900 dark:text-emerald-200 truncate">
+                写真添付中（タップで拡大）
+              </span>
+            </div>
+            <button
+              type="button"
+              id="btn-remove-selected-photo"
+              onClick={() => {
+                setSelectedImage(null);
+                setSelectedImageFilename(null);
+              }}
+              className="w-5 h-5 bg-stone-200 dark:bg-stone-700 hover:bg-stone-300 dark:hover:bg-stone-600 text-stone-700 dark:text-stone-200 rounded-full flex items-center justify-center transition-colors cursor-pointer shrink-0"
+              title="写真を解除"
+              aria-label="写真を解除"
+            >
+              <X className="w-3 h-3" />
+            </button>
+          </div>
+        )}
+
+        {/* ＋  メッセージ…       📷  ↑  コンパクト入力バー */}
         <form
           onSubmit={(e) => {
             e.preventDefault();
             handleSend();
           }}
-          className="flex items-end gap-2"
+          className="flex items-end gap-1.5 sm:gap-2"
         >
-          {/* 写真相談ボタン */}
+          {/* ＋ ボタン */}
           <button
-            id="btn-photo-consult"
+            id="btn-input-plus"
             type="button"
-            onClick={() => setShowPhotoSheet(true)}
-            disabled={isTyping || isProcessingPhoto}
-            className={`w-11 h-11 rounded-full flex items-center justify-center transition-all shrink-0 cursor-pointer active:scale-95 touch-manipulation disabled:opacity-40 ${
-              selectedImage
+            onClick={() => setShowPlusMenu(!showPlusMenu)}
+            className={`w-9 h-9 sm:w-10 sm:h-10 rounded-full flex items-center justify-center transition-all shrink-0 cursor-pointer active:scale-95 touch-manipulation ${
+              showPlusMenu
                 ? 'bg-emerald-100 dark:bg-emerald-950/80 text-emerald-700 dark:text-emerald-300 ring-2 ring-emerald-500'
-                : 'bg-stone-100 dark:bg-stone-800 hover:bg-stone-200 dark:hover:bg-stone-700 text-stone-600 dark:text-stone-300 hover:text-stone-900 dark:hover:text-stone-100'
+                : 'bg-stone-100 dark:bg-stone-800 hover:bg-stone-200 dark:hover:bg-stone-700 text-stone-600 dark:text-stone-300'
             }`}
-            title="写真で相談（カメラ撮影・ライブラリ選択）"
-            aria-label="写真で相談"
+            title="アクションメニュー（写真・チラシ・履歴・質問候補）"
+            aria-label="アクションメニュー"
           >
-            <Camera className="w-5 h-5" />
+            <Plus className="w-4 h-4 sm:w-4.5 sm:h-4.5" />
           </button>
 
-          <div className="flex-1 bg-stone-100 dark:bg-stone-800 rounded-2xl border border-stone-200 dark:border-stone-700 focus-within:border-emerald-500 dark:focus-within:border-emerald-500 focus-within:bg-white dark:focus-within:bg-stone-850 transition-colors px-3.5 py-1.5 flex items-center">
+          {/* メッセージ入力欄（通常時1行・入力時のみ必要な分だけ縦に伸長） */}
+          <div className="flex-1 bg-stone-100 dark:bg-stone-800 rounded-2xl border border-stone-200 dark:border-stone-700 focus-within:border-emerald-500 dark:focus-within:border-emerald-500 focus-within:bg-white dark:focus-within:bg-stone-850 transition-colors px-3 py-1 flex items-center min-h-[38px] sm:min-h-[40px]">
             <textarea
               id="input-chat-message"
               ref={textareaRef}
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder={
-                selectedImage
-                  ? '写真についての質問を入力... (空欄のまま送信も可能)'
-                  : '今の状況や気分を入力... (例: 疲れてるから20分で)'
-              }
+              placeholder="メッセージ…"
               rows={1}
-              className="w-full resize-none bg-transparent border-0 focus:outline-hidden text-sm text-stone-900 dark:text-stone-100 placeholder:text-stone-400 dark:placeholder:text-stone-500 max-h-28 py-1 leading-relaxed"
+              className="w-full resize-none bg-transparent border-0 focus:outline-hidden text-sm text-stone-900 dark:text-stone-100 placeholder:text-stone-400 dark:placeholder:text-stone-500 max-h-32 py-1 leading-relaxed"
             />
           </div>
 
+          {/* 📷 カメラボタン */}
+          <button
+            id="btn-photo-consult"
+            type="button"
+            onClick={() => setShowPhotoSheet(true)}
+            disabled={isTyping || isProcessingPhoto}
+            className={`w-9 h-9 sm:w-10 sm:h-10 rounded-full flex items-center justify-center transition-all shrink-0 cursor-pointer active:scale-95 touch-manipulation relative disabled:opacity-40 ${
+              selectedImage
+                ? 'bg-emerald-100 dark:bg-emerald-950/80 text-emerald-700 dark:text-emerald-300 ring-2 ring-emerald-500'
+                : 'bg-stone-100 dark:bg-stone-800 hover:bg-stone-200 dark:hover:bg-stone-700 text-stone-600 dark:text-stone-300'
+            }`}
+            title="写真で相談（カメラ撮影・アルバム選択）"
+            aria-label="写真で相談"
+          >
+            <Camera className="w-4 h-4 sm:w-4.5 sm:h-4.5" />
+            {selectedImage && (
+              <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-emerald-500" />
+            )}
+          </button>
+
+          {/* ↑ 送信ボタン */}
           <button
             id="btn-send-message"
             type="submit"
             disabled={(!input.trim() && !selectedImage) || isTyping || isProcessingPhoto}
-            className="w-11 h-11 rounded-full bg-emerald-600 text-white flex items-center justify-center disabled:opacity-40 disabled:cursor-not-allowed hover:bg-emerald-700 active:scale-95 transition-all shrink-0 touch-manipulation shadow-xs cursor-pointer"
+            className={`w-9 h-9 sm:w-10 sm:h-10 rounded-full flex items-center justify-center transition-all shrink-0 touch-manipulation shadow-xs cursor-pointer active:scale-95 ${
+              (input.trim() || selectedImage) && !isTyping && !isProcessingPhoto
+                ? 'bg-emerald-600 text-white hover:bg-emerald-700'
+                : 'bg-stone-100 dark:bg-stone-800 text-stone-400 dark:text-stone-600 cursor-not-allowed'
+            }`}
+            title="送信"
             aria-label="送信"
           >
-            <Send className="w-4 h-4" />
+            <ArrowUp className="w-4 h-4 sm:w-4.5 sm:h-4.5 stroke-[2.5]" />
           </button>
         </form>
       </footer>

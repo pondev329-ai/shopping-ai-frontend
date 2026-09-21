@@ -1,20 +1,13 @@
 import React from 'react';
-import {
-  AppScene,
-} from '../types/chat';
+import { AppScene } from '../types/chat';
 import { SessionStatusSummary } from '../types/session';
 import {
-  ShoppingBag,
-  Utensils,
-  BookOpen,
   Fish,
   Beef,
   ChefHat,
   Tag,
   Sparkles,
   ChevronRight,
-  Activity,
-  Layers,
 } from 'lucide-react';
 
 interface CompanionSceneStageProps {
@@ -83,6 +76,25 @@ function getExpertMeta(expertMode?: string | null) {
   };
 }
 
+/**
+ * 食材・テキストから適切な絵文字アイコンを判定
+ */
+function getIngredientIcon(text: string): string {
+  const lower = text.toLowerCase();
+  if (lower.includes('キャベツ') || lower.includes('レタス') || lower.includes('白菜') || lower.includes('ほうれん草') || lower.includes('小松菜') || lower.includes('野菜') || lower.includes('青菜')) return '🥬';
+  if (lower.includes('肉') || lower.includes('豚') || lower.includes('牛') || lower.includes('鶏') || lower.includes('ひき肉') || lower.includes('挽肉') || lower.includes('バラ')) return '🥩';
+  if (lower.includes('魚') || lower.includes('鮭') || lower.includes('サバ') || lower.includes('鱈') || lower.includes('刺身') || lower.includes('マグロ') || lower.includes('鮮魚')) return '🐟';
+  if (lower.includes('卵') || lower.includes('たまご')) return '🥚';
+  if (lower.includes('トマト')) return '🍅';
+  if (lower.includes('にんじん') || lower.includes('人参')) return '🥕';
+  if (lower.includes('たまねぎ') || lower.includes('玉ねぎ') || lower.includes('タマネギ')) return '🧅';
+  if (lower.includes('キノコ') || lower.includes('きのこ') || lower.includes('しめじ') || lower.includes('えのき') || lower.includes('椎茸')) return '🍄';
+  if (lower.includes('豆腐') || lower.includes('納豆') || lower.includes('大豆')) return '🧊';
+  if (lower.includes('米') || lower.includes('ご飯') || lower.includes('パン')) return '🍚';
+  if (lower.includes('じゃがいも') || lower.includes('ポテト')) return '🥔';
+  return '🍴';
+}
+
 export const CompanionSceneStage: React.FC<CompanionSceneStageProps> = ({
   scene,
   expertMode,
@@ -92,97 +104,187 @@ export const CompanionSceneStage: React.FC<CompanionSceneStageProps> = ({
 }) => {
   const expertMeta = getExpertMeta(expertMode);
 
-  // シーンごとの基本情報と背景カラー・環境設定
-  const sceneConfig = {
+  // 1. シーン定義（最上部表示用）
+  const sceneHeader = {
     planning: {
-      name: '自宅・リビング（献立計画中）',
-      chipLabel: '📝 献立相談',
-      characterRole: '今日の相談役',
+      title: '🪑 計画中',
+      subtitle: '献立・買い出し相談',
     },
     shopping: {
-      name: 'スーパーマーケット店内（お買い物中）',
-      chipLabel: '🛒 買物中',
-      characterRole: 'お買物ナビゲーター',
+      title: '🛒 買い物中',
+      subtitle: '店内ナビ・食材選び',
     },
     after_shopping: {
-      name: 'キッチン・調理台（帰宅・調理前）',
-      chipLabel: '🍳 調理前',
-      characterRole: 'キッチン調理パートナー',
+      title: '🏠 買い物後',
+      subtitle: '調理・段取りサポート',
     },
   }[scene] || {
-    name: '献立・買い物相談',
-    chipLabel: '📝 相談中',
-    characterRole: '相談役',
+    title: '🪑 相談中',
+    subtitle: 'Shopping AI',
   };
 
-  // 脇役としてのステータス概要サマリー
+  // 2. Statusカードに表示する状態アイテム（詰め込みすぎず、3〜4行でひと目で把握）
   const candidateCount = statusSummary?.candidates?.length || 0;
+  const decidedItems = statusSummary?.decided || [];
   const undecidedItems = statusSummary?.undecided || [];
-  const undecidedPreview =
-    undecidedItems.length > 0 ? undecidedItems[0].slice(0, 10) : '条件未確定';
-  const hasShoppingProgress =
-    scene === 'shopping' && statusSummary?.shoppingProgress?.totalItems;
+  const situationItems = statusSummary?.situation || [];
+  const possibilities = statusSummary?.possibilities || [];
+  const progress = statusSummary?.shoppingProgress;
+
+  // 食材や主要アイテムの抽出
+  const ingredientItems: Array<{ icon: string; text: string }> = [];
+
+  // 手持ち食材や可能性から食材テキストを抽出
+  possibilities.forEach((p) => {
+    // "手持ち食材: キャベツ, 豚肉" や 単純な食材名
+    const cleaned = p.replace(/^手持ち食材:\s*/, '').replace(/^候補食材:\s*/, '');
+    cleaned.split(/[,、・]/).forEach((part) => {
+      const trimmed = part.trim();
+      if (trimmed && trimmed.length < 15 && ingredientItems.length < 2) {
+        ingredientItems.push({
+          icon: getIngredientIcon(trimmed),
+          text: trimmed,
+        });
+      }
+    });
+  });
+
+  // 状況から食材・条件が取れれば補完
+  if (ingredientItems.length === 0) {
+    situationItems.forEach((s) => {
+      if (ingredientItems.length < 2 && (s.includes('分') || s.includes('円') || s.includes('肉') || s.includes('魚') || s.includes('野菜') || s.includes('時短'))) {
+        ingredientItems.push({
+          icon: getIngredientIcon(s),
+          text: s,
+        });
+      }
+    });
+  }
+
+  // 状態リストの組み立て
+  const displayStatusLines: Array<{ icon: string; text: string; badge?: string }> = [];
+
+  // A. 決まったことがある場合
+  if (decidedItems.length > 0) {
+    displayStatusLines.push({
+      icon: '✓',
+      text: decidedItems[0],
+      badge: '決定',
+    });
+  }
+
+  // B. 食材アイテム
+  ingredientItems.forEach((item) => {
+    if (displayStatusLines.length < 3) {
+      displayStatusLines.push({
+        icon: item.icon,
+        text: item.text,
+      });
+    }
+  });
+
+  // C. 候補
+  if (candidateCount > 0 && displayStatusLines.length < 3) {
+    displayStatusLines.push({
+      icon: '✨',
+      text: statusSummary?.candidates?.[0]?.title
+        ? `${candidateCount}つの候補 (${statusSummary.candidates[0].title.slice(0, 8)}…)`
+        : `${candidateCount}つの候補`,
+      badge: `${candidateCount}件`,
+    });
+  }
+
+  // D. 買い物進行度
+  if (scene === 'shopping' && progress?.totalItems && displayStatusLines.length < 3) {
+    displayStatusLines.push({
+      icon: '🛒',
+      text: `カゴ入れ: ${progress.collectedItems || 0}/${progress.totalItems}点`,
+    });
+  }
+
+  // E. まだ決まっていないこと
+  if (undecidedItems.length > 0 && displayStatusLines.length < 3) {
+    displayStatusLines.push({
+      icon: '❓',
+      text: `未定: ${undecidedItems[0]}`,
+    });
+  }
+
+  // 初期状態でまだ何もない場合のデフォルト表示（ユーザーの例に沿った見通しの良いプレビュー）
+  if (displayStatusLines.length === 0) {
+    if (scene === 'shopping') {
+      displayStatusLines.push(
+        { icon: '🥬', text: 'キャベツ (野菜コーナー)' },
+        { icon: '🥩', text: '肉・メイン食材' },
+        { icon: '✨', text: '現在の候補を検討中' }
+      );
+    } else if (scene === 'after_shopping') {
+      displayStatusLines.push(
+        { icon: '🍳', text: '買ってきた食材の整理' },
+        { icon: '⏱️', text: '調理順・段取りの相談' },
+        { icon: '🍴', text: 'おいしく仕上げるコツ' }
+      );
+    } else {
+      displayStatusLines.push(
+        { icon: '🥬', text: '手持ち食材・好みの相談' },
+        { icon: '🥩', text: '今日のメイン候補' },
+        { icon: '✨', text: '献立・買い出し計画' }
+      );
+    }
+  }
 
   return (
     <div
       id="companion-scene-stage"
-      aria-label="現在のシーンとアシスタントキャラクター"
-      className="relative w-full h-[38vh] sm:h-[42vh] min-h-[250px] max-h-[400px] rounded-2xl sm:rounded-3xl overflow-hidden shadow-sm select-none border border-stone-200/90 dark:border-stone-800 transition-all"
+      aria-label="現在のシーンとステータス"
+      className="relative w-full h-44 sm:h-48 md:h-52 rounded-2xl overflow-hidden shadow-xs select-none border border-stone-200/90 dark:border-stone-800 transition-all"
     >
       {/* ============================================================ */}
-      {/* 1. シーン背景イラスト (Scene Environments) */}
+      {/* 1. 横長の背景（1つのシーンとして全面に広がる・左右分割なし） */}
       {/* ============================================================ */}
 
       {/* A. 計画中（自宅・リビング・夕方の机） */}
       {scene === 'planning' && (
-        <div className="absolute inset-0 bg-gradient-to-b from-[#fbf3e8] via-[#f7e6d0] to-[#ecd3b5] overflow-hidden">
-          {/* 夕暮れの窓 */}
-          <div className="absolute top-4 right-6 w-32 h-44 rounded-t-full border-4 border-white/80 bg-gradient-to-b from-[#fcd34d] via-[#fb923c] to-[#fda4af] opacity-80 shadow-inner overflow-hidden">
-            {/* 窓の桟 */}
-            <div className="absolute top-0 bottom-0 left-1/2 w-1 bg-white/70" />
-            <div className="absolute left-0 right-0 top-1/2 h-1 bg-white/70" />
-            {/* 遠くの山・木々のシルエット */}
-            <div className="absolute -bottom-2 -left-2 w-20 h-10 rounded-full bg-amber-800/20 blur-xs" />
-            <div className="absolute -bottom-4 right-0 w-24 h-14 rounded-full bg-amber-900/25 blur-xs" />
+        <div className="absolute inset-0 bg-gradient-to-b from-[#fcf5ec] via-[#f7e6d0] to-[#ecd3b5] overflow-hidden pointer-events-none">
+          {/* 夕暮れのアーチ窓（中央やや右寄りに配置） */}
+          <div className="absolute top-2 right-48 sm:right-64 w-28 h-36 rounded-t-full border-3 border-white/85 bg-gradient-to-b from-[#fcd34d] via-[#fb923c] to-[#fda4af] opacity-80 shadow-inner overflow-hidden">
+            <div className="absolute top-0 bottom-0 left-1/2 w-0.5 bg-white/70" />
+            <div className="absolute left-0 right-0 top-1/2 h-0.5 bg-white/70" />
+            <div className="absolute -bottom-2 -left-2 w-16 h-8 rounded-full bg-amber-800/20 blur-xs" />
+            <div className="absolute -bottom-3 right-0 w-20 h-10 rounded-full bg-amber-900/25 blur-xs" />
           </div>
 
           {/* 天井のペンダントライト */}
-          <div className="absolute top-0 left-1/3 -translate-x-1/2 flex flex-col items-center opacity-85">
-            <div className="w-0.5 h-10 bg-stone-500/60" />
-            <div className="w-12 h-6 rounded-t-full bg-stone-700 shadow-sm" />
-            <div className="w-8 h-2 rounded-b-full bg-amber-200 shadow-md" />
-            {/* 柔らかな光の円錐 */}
-            <div className="w-48 h-64 bg-gradient-to-b from-amber-300/25 to-transparent blur-md pointer-events-none -mt-1" />
+          <div className="absolute top-0 left-36 sm:left-48 -translate-x-1/2 flex flex-col items-center opacity-85">
+            <div className="w-0.5 h-6 bg-stone-500/60" />
+            <div className="w-10 h-5 rounded-t-full bg-stone-700 shadow-sm" />
+            <div className="w-7 h-1.5 rounded-b-full bg-amber-200 shadow-md" />
+            <div className="w-40 h-44 bg-gradient-to-b from-amber-300/20 to-transparent blur-md pointer-events-none -mt-1" />
           </div>
 
-          {/* 部屋の壁のインテリア（時計・ポスター） */}
-          <div className="absolute top-7 left-6 w-10 h-10 rounded-full border-2 border-stone-400 bg-white/80 flex items-center justify-center shadow-2xs">
-            <div className="w-3.5 h-0.5 bg-stone-600 origin-right -rotate-45" />
-            <div className="w-2.5 h-0.5 bg-stone-600 origin-right rotate-45 absolute" />
+          {/* 壁の時計 */}
+          <div className="absolute top-4 left-6 sm:left-10 w-8 h-8 rounded-full border border-stone-400 bg-white/85 flex items-center justify-center shadow-2xs">
+            <div className="w-2.5 h-0.5 bg-stone-600 origin-right -rotate-45" />
+            <div className="w-2 h-0.5 bg-stone-600 origin-right rotate-45 absolute" />
           </div>
 
-          {/* 木目のダイニングテーブル */}
-          <div className="absolute bottom-0 left-0 right-0 h-28 bg-gradient-to-t from-[#c29671] via-[#d4a984] to-[#deb592] border-t-4 border-[#ad7f58] shadow-lg">
-            {/* テーブルの上の献立ノート & ペン */}
-            <div className="absolute -top-6 left-6 w-24 h-16 bg-amber-50 rounded-lg shadow-sm border border-stone-300 -rotate-3 p-1.5 flex flex-col justify-between">
-              <div className="text-[8px] font-bold text-stone-600 flex items-center gap-1 border-b border-stone-200 pb-0.5">
-                <span>📖 献立メモ</span>
+          {/* 木目のダイニングテーブル（横長全面に広がる） */}
+          <div className="absolute bottom-0 left-0 right-0 h-18 sm:h-20 bg-gradient-to-t from-[#c29671] via-[#d4a984] to-[#deb592] border-t-3 border-[#ad7f58] shadow-md">
+            {/* テーブル上の献立メモ */}
+            <div className="absolute top-2 left-28 sm:left-36 w-16 h-12 bg-amber-50 rounded shadow-xs border border-stone-300 -rotate-3 p-1 flex flex-col justify-between">
+              <span className="text-[7px] font-bold text-stone-600 border-b border-stone-200 pb-0.5">📖 メモ</span>
+              <div className="space-y-0.5">
+                <div className="w-10 h-0.5 bg-stone-300 rounded" />
+                <div className="w-8 h-0.5 bg-stone-300 rounded" />
               </div>
-              <div className="space-y-1 py-0.5">
-                <div className="w-16 h-1 bg-stone-300/80 rounded" />
-                <div className="w-12 h-1 bg-stone-300/80 rounded" />
-                <div className="w-14 h-1 bg-stone-300/80 rounded" />
-              </div>
-              {/* ペン */}
-              <div className="absolute -right-2 top-2 w-14 h-1 bg-emerald-700 rounded-full rotate-12 shadow-2xs" />
+              <div className="absolute -right-1 top-1.5 w-8 h-0.5 bg-emerald-700 rounded-full rotate-12" />
             </div>
 
-            {/* 温かいマグカップ */}
-            <div className="absolute -top-7 right-8 flex flex-col items-center">
-              {/* 湯気 */}
-              <div className="w-1 h-3 bg-white/60 rounded-full blur-[0.5px] animate-pulse -mb-1" />
-              <div className="w-7 h-8 rounded-b-xl bg-teal-600 border border-teal-700 shadow-sm relative">
-                <div className="absolute -right-2 top-1.5 w-3 h-4 rounded-r-full border-2 border-teal-700" />
+            {/* マグカップ */}
+            <div className="absolute top-1 left-48 sm:left-56 flex flex-col items-center">
+              <div className="w-0.5 h-2 bg-white/60 rounded-full blur-[0.5px] animate-pulse" />
+              <div className="w-5 h-6 rounded-b-lg bg-teal-600 border border-teal-700 shadow-xs relative">
+                <div className="absolute -right-1.5 top-1 w-2 h-3 rounded-r-full border border-teal-700" />
               </div>
             </div>
           </div>
@@ -191,60 +293,49 @@ export const CompanionSceneStage: React.FC<CompanionSceneStageProps> = ({
 
       {/* B. 買い物中（スーパーマーケット店内） */}
       {scene === 'shopping' && (
-        <div className="absolute inset-0 bg-gradient-to-b from-[#e6f4ea] via-[#cbf0d8] to-[#a8e2bc] overflow-hidden">
-          {/* スーパーの店内天井照明ライン */}
-          <div className="absolute top-0 inset-x-0 h-6 bg-stone-200 border-b border-stone-300 flex items-center justify-around px-4">
-            <div className="w-20 h-1.5 bg-white rounded-full shadow-xs" />
-            <div className="w-20 h-1.5 bg-white rounded-full shadow-xs" />
-            <div className="w-20 h-1.5 bg-white rounded-full shadow-xs" />
+        <div className="absolute inset-0 bg-gradient-to-b from-[#eaf6ee] via-[#d0f2dc] to-[#aee4c1] overflow-hidden pointer-events-none">
+          {/* 天井の照明ライン */}
+          <div className="absolute top-0 inset-x-0 h-4 bg-stone-200/90 border-b border-stone-300 flex items-center justify-around px-6">
+            <div className="w-24 h-1 bg-white rounded-full shadow-xs" />
+            <div className="w-24 h-1 bg-white rounded-full shadow-xs" />
+            <div className="w-24 h-1 bg-white rounded-full shadow-xs" />
           </div>
 
-          {/* 店頭の特売・POPバナー */}
-          <div className="absolute top-9 left-6 px-2.5 py-1 bg-red-600 text-yellow-300 font-extrabold text-[11px] rounded-md shadow-sm -rotate-6 border border-yellow-300 tracking-wider">
+          {/* 特売POPバナー */}
+          <div className="absolute top-6 left-28 sm:left-36 px-2 py-0.5 bg-red-600 text-yellow-300 font-extrabold text-[10px] rounded shadow-xs -rotate-3 border border-yellow-300 tracking-wider">
             ★ 本日特売市 ★
           </div>
-          <div className="absolute top-10 right-8 px-2 py-0.5 bg-amber-400 text-stone-900 font-bold text-[10px] rounded shadow-sm rotate-3 border border-amber-500">
-            鮮度宣言！
-          </div>
 
-          {/* 背景の陳列棚（野菜・果物・食材の彩り） */}
-          <div className="absolute top-20 inset-x-4 h-24 bg-white/85 rounded-xl border border-emerald-300/80 shadow-xs p-2 flex flex-col justify-between">
-            {/* 上段棚 */}
-            <div className="flex items-center justify-between px-2 pb-1 border-b border-stone-200">
-              <span className="text-[10px] font-bold text-emerald-800">新鮮野菜・青果コーナー</span>
-              <span className="text-[9px] text-stone-500">産地直送</span>
+          {/* 陳列棚（中央から右奥に広がる） */}
+          <div className="absolute top-12 left-28 sm:left-36 right-48 sm:right-60 h-16 bg-white/85 rounded-lg border border-emerald-300/80 shadow-xs p-1.5 flex flex-col justify-between">
+            <div className="flex items-center justify-between px-1 text-[9px] font-bold text-emerald-800 border-b border-stone-200">
+              <span>新鮮野菜・青果</span>
+              <span className="text-stone-400 font-normal">産地直送</span>
             </div>
-            {/* 商品アイコン並び */}
-            <div className="flex items-center justify-around text-lg">
-              <span title="トマト" className="drop-shadow-xs">🍅</span>
-              <span title="キャベツ" className="drop-shadow-xs">🥬</span>
-              <span title="にんじん" className="drop-shadow-xs">🥕</span>
-              <span title="たまねぎ" className="drop-shadow-xs">🧅</span>
-              <span title="きのこ" className="drop-shadow-xs">🍄</span>
-              <span title="お魚" className="drop-shadow-xs">🐟</span>
+            <div className="flex items-center justify-around text-base">
+              <span title="トマト">🍅</span>
+              <span title="キャベツ">🥬</span>
+              <span title="にんじん">🥕</span>
+              <span title="たまねぎ">🧅</span>
+              <span title="きのこ">🍄</span>
             </div>
-            {/* 値札POPバー */}
-            <div className="flex items-center justify-around text-[9px] font-mono font-bold text-red-600 bg-red-50 py-0.5 rounded">
+            <div className="flex items-center justify-around text-[8px] font-mono font-bold text-red-600 bg-red-50/80 rounded py-0.2">
               <span>¥128</span>
               <span>¥158</span>
               <span>¥98</span>
               <span>¥198</span>
-              <span>¥298</span>
             </div>
           </div>
 
-          {/* 店内の通路・床 */}
-          <div className="absolute bottom-0 left-0 right-0 h-28 bg-gradient-to-t from-[#c6e6d4] to-[#dcf4e5] border-t-2 border-emerald-400/60">
-            {/* 通路のタイル模様 */}
-            <div className="w-full h-full opacity-35 bg-[radial-gradient(#059669_1px,transparent_1px)] [background-size:16px_16px]" />
+          {/* 通路の床 */}
+          <div className="absolute bottom-0 left-0 right-0 h-18 sm:h-20 bg-gradient-to-t from-[#c6e6d4] to-[#dcf4e5] border-t-2 border-emerald-400/60">
+            <div className="w-full h-full opacity-30 bg-[radial-gradient(#059669_1px,transparent_1px)] [background-size:14px_14px]" />
             {/* 買い物カゴ */}
-            <div className="absolute bottom-3 left-6 w-16 h-12 bg-red-500/90 rounded-b-xl rounded-t-sm border-2 border-red-700 shadow-md flex items-center justify-center">
-              <div className="w-12 h-8 border border-white/50 rounded flex flex-col justify-around p-0.5">
-                <div className="h-0.5 bg-white/60" />
+            <div className="absolute bottom-2 left-28 sm:left-34 w-12 h-9 bg-red-500/90 rounded-b-lg border border-red-700 shadow-xs flex items-center justify-center">
+              <div className="w-8 h-5 border border-white/50 rounded flex flex-col justify-around">
                 <div className="h-0.5 bg-white/60" />
               </div>
-              {/* カゴの持ち手 */}
-              <div className="absolute -top-3 inset-x-2 h-4 border-2 border-red-700 rounded-t-full" />
+              <div className="absolute -top-2 inset-x-1.5 h-3 border-2 border-red-700 rounded-t-full" />
             </div>
           </div>
         </div>
@@ -252,137 +343,54 @@ export const CompanionSceneStage: React.FC<CompanionSceneStageProps> = ({
 
       {/* C. 帰宅後・調理前（キッチン・調理台） */}
       {scene === 'after_shopping' && (
-        <div className="absolute inset-0 bg-gradient-to-b from-[#fef3c7] via-[#fae8b0] to-[#f5d084] overflow-hidden">
-          {/* キッチンのタイル壁 */}
-          <div className="absolute inset-0 opacity-20 bg-[linear-gradient(to_right,#b45309_1px,transparent_1px),linear-gradient(to_bottom,#b45309_1px,transparent_1px)] [background-size:24px_24px]" />
+        <div className="absolute inset-0 bg-gradient-to-b from-[#fef5d6] via-[#fae8b0] to-[#f5d084] overflow-hidden pointer-events-none">
+          {/* タイル壁 */}
+          <div className="absolute inset-0 opacity-15 bg-[linear-gradient(to_right,#b45309_1px,transparent_1px),linear-gradient(to_bottom,#b45309_1px,transparent_1px)] [background-size:20px_20px]" />
 
-          {/* 調理器具の吊り下げラック */}
-          <div className="absolute top-5 inset-x-8 h-1 bg-stone-500 rounded flex items-center justify-around">
-            <div className="flex flex-col items-center">
-              <div className="w-0.5 h-3 bg-stone-600" />
-              <div className="w-3 h-5 rounded-b-full bg-stone-700" title="おたま" />
-            </div>
-            <div className="flex flex-col items-center">
-              <div className="w-0.5 h-3 bg-stone-600" />
-              <div className="w-2.5 h-6 rounded-b-sm bg-amber-800" title="木べら" />
-            </div>
-            <div className="flex flex-col items-center">
-              <div className="w-0.5 h-3 bg-stone-600" />
-              <div className="w-4 h-5 rounded-b-full border border-stone-600" title="フライ返し" />
-            </div>
-            <div className="flex flex-col items-center">
-              <div className="w-0.5 h-3 bg-stone-600" />
-              <div className="w-3 h-4 rounded-full bg-stone-600" title="計量スプーン" />
-            </div>
+          {/* 調理器具ラック */}
+          <div className="absolute top-4 left-24 sm:left-32 right-48 sm:right-60 h-0.5 bg-stone-500 rounded flex items-center justify-around">
+            <div className="w-2.5 h-4 rounded-b-full bg-stone-700" title="おたま" />
+            <div className="w-2 h-5 rounded-b-sm bg-amber-800" title="木べら" />
+            <div className="w-3 h-4 rounded-b-full border border-stone-600" title="フライ返し" />
           </div>
 
-          {/* 清潔なステンレス調理台 / カウンター */}
-          <div className="absolute bottom-0 left-0 right-0 h-32 bg-gradient-to-t from-[#e2e8f0] via-[#f1f5f9] to-[#ffffff] border-t-4 border-stone-300 shadow-lg">
-            {/* まな板 & 包丁 */}
-            <div className="absolute top-3 left-6 w-24 h-16 bg-[#fed7aa] rounded-md border border-[#ea580c]/40 shadow-sm rotate-2 p-1">
-              {/* 切られた食材 */}
-              <div className="flex items-center gap-1 mt-1 ml-1">
-                <span className="text-sm">🥕</span>
-                <span className="text-xs">🧅</span>
+          {/* 調理台カウンター */}
+          <div className="absolute bottom-0 left-0 right-0 h-20 sm:h-22 bg-gradient-to-t from-[#e2e8f0] via-[#f1f5f9] to-[#ffffff] border-t-3 border-stone-300 shadow-md">
+            {/* まな板 */}
+            <div className="absolute top-2 left-28 sm:left-36 w-18 h-12 bg-[#fed7aa] rounded border border-[#ea580c]/30 shadow-xs rotate-1 p-1">
+              <div className="flex items-center gap-1">
+                <span className="text-xs">🥕</span>
+                <span className="text-[10px]">🧅</span>
               </div>
-              {/* 包丁 */}
-              <div className="absolute -right-3 top-2 w-14 h-3 bg-stone-300 border border-stone-400 rounded-r-xs shadow-xs -rotate-12 flex items-center">
-                <div className="w-4 h-full bg-stone-800 rounded-l-xs" />
-              </div>
+              <div className="absolute -right-2 top-1.5 w-10 h-2 bg-stone-300 border border-stone-400 rounded-r shadow-xs -rotate-6" />
             </div>
 
-            {/* 買ってきた食材のクラフト紙袋（ネギ・バゲットが覗く） */}
-            <div className="absolute top-1 right-6 w-16 h-22 bg-[#d97706] rounded-t-sm rounded-b-md shadow-md border border-[#b45309] p-1 flex flex-col justify-between">
-              {/* 飛び出す長ネギ & フランスパン */}
-              <div className="absolute -top-7 left-2 text-xl drop-shadow-xs -rotate-12">
-                🥖
-              </div>
-              <div className="absolute -top-8 right-2 text-xl drop-shadow-xs rotate-6">
-                🥬
-              </div>
-              <div className="text-[7px] text-amber-950/70 font-mono text-center pt-2">
-                SHOPPING
-              </div>
-            </div>
-
-            {/* フライパン */}
-            <div className="absolute top-8 left-36 w-14 h-14 rounded-full bg-stone-800 border-2 border-stone-600 shadow-md flex items-center justify-center">
-              <div className="w-10 h-10 rounded-full border border-stone-700 bg-stone-900/60" />
-              {/* 取っ手 */}
-              <div className="absolute -right-7 top-1/2 -translate-y-1/2 w-8 h-2.5 bg-stone-700 rounded-r shadow-xs" />
+            {/* クラフト紙袋（ネギ・フランスパン） */}
+            <div className="absolute top-1 left-48 sm:left-58 w-12 h-16 bg-[#d97706] rounded-b shadow-sm border border-[#b45309] p-1">
+              <div className="absolute -top-5 left-1 text-base drop-shadow-xs -rotate-12">🥖</div>
+              <div className="absolute -top-6 right-1 text-base drop-shadow-xs rotate-6">🥬</div>
             </div>
           </div>
         </div>
       )}
 
       {/* ============================================================ */}
-      {/* 2. 脇役としての現在ステータス（HUD / Floating Status Chip Bar） */}
-      {/* ============================================================ */}
-      <div
-        id="scene-hud-status-bar"
-        className="absolute top-3 right-3 z-20 flex items-center gap-1.5"
-      >
-        <button
-          type="button"
-          id="btn-scene-hud-open-status"
-          onClick={onOpenStatusDetail}
-          className="group flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/90 dark:bg-stone-900/90 hover:bg-white dark:hover:bg-stone-850 active:scale-95 text-stone-800 dark:text-stone-100 border border-stone-300 dark:border-stone-700 shadow-sm backdrop-blur-md transition-all cursor-pointer"
-          title="タップして詳細ステータス・認識ボードを表示"
-        >
-          {/* シーンラベル */}
-          <span className="text-xs font-bold text-stone-900 dark:text-stone-100 shrink-0">
-            {sceneConfig.chipLabel}
-          </span>
-
-          <span className="w-1 h-3 bg-stone-300 dark:bg-stone-700 rounded-full" />
-
-          {/* 候補数 */}
-          <span className="text-[11px] font-semibold text-emerald-800 dark:text-emerald-300 shrink-0 bg-emerald-50 dark:bg-emerald-950/80 px-1.5 py-0.2 rounded border border-emerald-200 dark:border-emerald-700/60">
-            候補 {candidateCount}
-          </span>
-
-          {/* 未確定/進行度概要 */}
-          {hasShoppingProgress ? (
-            <span className="text-[11px] text-teal-800 dark:text-teal-300 shrink-0 bg-teal-50 dark:bg-teal-950/80 px-1.5 py-0.2 rounded border border-teal-200 dark:border-teal-700/60 font-mono">
-              進行 {statusSummary?.shoppingProgress?.collectedItems || 0}/
-              {statusSummary?.shoppingProgress?.totalItems || 0}
-            </span>
-          ) : (
-            <span className="text-[11px] text-amber-900 dark:text-amber-300 shrink-0 bg-amber-50 dark:bg-amber-950/80 px-1.5 py-0.2 rounded border border-amber-200 dark:border-amber-700/60 max-w-[80px] truncate">
-              {undecidedPreview}
-            </span>
-          )}
-
-          {/* 展開アイコン */}
-          <span className="w-5 h-5 rounded-full bg-stone-100 dark:bg-stone-800 group-hover:bg-emerald-100 dark:group-hover:bg-emerald-900/60 flex items-center justify-center transition-colors">
-            <ChevronRight className="w-3 h-3 text-stone-500 dark:text-stone-400 group-hover:text-emerald-700 dark:group-hover:text-emerald-300" />
-          </span>
-        </button>
-      </div>
-
-      {/* 左上の専門家モードバッジ（専門家モード発動時のみ表示） */}
-      {expertMeta && (
-        <div
-          id="scene-hud-expert-badge"
-          className="absolute top-3 left-3 z-20 flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-xs font-bold shadow-sm backdrop-blur-md animate-in fade-in slide-in-from-top-1 duration-200 bg-white/95 dark:bg-stone-900/95 text-stone-800 dark:text-stone-100 border-stone-200 dark:border-stone-700"
-          title={expertMeta.title}
-        >
-          <span className={`p-1 rounded-full ${expertMeta.badgeStyle}`}>
-            <expertMeta.icon className="w-3 h-3 text-white" />
-          </span>
-          <span className="font-bold text-[11px]">{expertMeta.label}</span>
-        </div>
-      )}
-
-      {/* ============================================================ */}
-      {/* 3. メインキャラクター：ポコ太（愛嬌あるタヌキのアシスタント） */}
+      {/* 2. 左側：ボコ太（現在のシーン世界の中に立つアシスタント） */}
       {/* ============================================================ */}
       <div
         id="scene-character-container"
-        className="absolute bottom-2 sm:bottom-3 left-4 sm:left-8 z-10 flex flex-col items-center pointer-events-auto"
+        className="absolute bottom-0 left-2 sm:left-5 z-10 flex flex-col items-center pointer-events-auto select-none"
       >
-        {/* タヌキのポコ太 SVGキャラクター */}
-        <div className="relative w-34 h-48 sm:w-42 sm:h-56 drop-shadow-xl transition-transform hover:scale-[1.02]">
+        {/* 考え中エフェクト（ボコ太の頭上にふわっと浮かぶ） */}
+        {isTyping && (
+          <div className="mb-0.5 z-20 flex items-center gap-1 px-2 py-0.5 rounded-full bg-white/95 dark:bg-stone-900/95 backdrop-blur-md shadow-md border border-emerald-400 dark:border-emerald-600 text-[10px] font-bold text-emerald-800 dark:text-emerald-300 animate-bounce whitespace-nowrap">
+            <Sparkles className="w-2.5 h-2.5 text-emerald-600 dark:text-emerald-400 animate-spin" />
+            <span>考え中...</span>
+          </div>
+        )}
+
+        {/* ボコ太 SVGキャラクター（横長シーンに収まる絶妙なサイズ） */}
+        <div className="relative w-24 h-34 sm:w-28 sm:h-38 drop-shadow-md transition-transform hover:scale-[1.02]">
           <svg
             viewBox="0 0 160 220"
             className="w-full h-full"
@@ -390,20 +398,17 @@ export const CompanionSceneStage: React.FC<CompanionSceneStageProps> = ({
             xmlns="http://www.w3.org/2000/svg"
           >
             <defs>
-              {/* タヌキの毛並みグラデーション */}
               <linearGradient id="tanukiBody" x1="80" y1="50" x2="80" y2="210" gradientUnits="userSpaceOnUse">
                 <stop stopColor="#8d5b4c" />
                 <stop offset="0.6" stopColor="#6e4336" />
                 <stop offset="1" stopColor="#543026" />
               </linearGradient>
 
-              {/* お腹のふんわりクリーム色 */}
               <linearGradient id="bellyCream" x1="80" y1="120" x2="80" y2="200" gradientUnits="userSpaceOnUse">
                 <stop stopColor="#fff7ed" />
                 <stop offset="1" stopColor="#fed7aa" />
               </linearGradient>
 
-              {/* シーン別エプロン・服グラデーション */}
               <linearGradient id="shoppingApron" x1="80" y1="130" x2="80" y2="200" gradientUnits="userSpaceOnUse">
                 <stop stopColor="#10b981" />
                 <stop offset="1" stopColor="#047857" />
@@ -414,91 +419,70 @@ export const CompanionSceneStage: React.FC<CompanionSceneStageProps> = ({
               </linearGradient>
             </defs>
 
-            {/* ふさふさのタヌキのしっぽ（後ろで揺れる） */}
+            {/* ふさふさのタヌキのしっぽ */}
             <g className="animate-pulse" style={{ animationDuration: '3s' }}>
               <path
                 d="M115 155 C145 145, 160 170, 145 195 C135 210, 105 205, 100 185 Z"
                 fill="#543026"
               />
-              {/* しっぽの黒い縞模様 */}
               <path d="M125 155 C135 160, 140 175, 130 185" stroke="#291813" strokeWidth="6" strokeLinecap="round" />
               <path d="M135 175 C145 180, 145 195, 138 200" stroke="#291813" strokeWidth="6" strokeLinecap="round" />
             </g>
 
-            {/* 丸い耳（左耳・右耳） */}
+            {/* 耳 */}
             <g>
-              {/* 左耳 */}
               <circle cx="48" cy="48" r="18" fill="#543026" />
               <circle cx="48" cy="48" r="10" fill="#fed7aa" />
-              {/* 右耳 */}
               <circle cx="112" cy="48" r="18" fill="#543026" />
               <circle cx="112" cy="48" r="10" fill="#fed7aa" />
             </g>
 
             {/* まんまる胴体 */}
             <ellipse cx="80" cy="155" rx="46" ry="50" fill="url(#tanukiBody)" />
-
-            {/* お腹のふかふかパッチ */}
+            {/* お腹 */}
             <ellipse cx="80" cy="160" rx="32" ry="36" fill="url(#bellyCream)" />
 
             {/* まんまる頭部 */}
             <ellipse cx="80" cy="82" rx="44" ry="38" fill="url(#tanukiBody)" />
 
-            {/* タヌキのチャームポイント：目の周りの黒いマスクパッチ */}
+            {/* 目の周りのマスクパッチ */}
             <ellipse cx="58" cy="82" rx="17" ry="14" fill="#3b2219" transform="rotate(-8 58 82)" />
             <ellipse cx="102" cy="82" rx="17" ry="14" fill="#3b2219" transform="rotate(8 102 82)" />
 
-            {/* ふっくら白いマズル（鼻・口元） */}
+            {/* マズル（口元） */}
             <ellipse cx="80" cy="92" rx="18" ry="14" fill="#fff7ed" />
-
-            {/* つやつやの黒いお鼻 */}
+            {/* 黒い鼻 */}
             <ellipse cx="80" cy="86" rx="5" ry="3.5" fill="#1c1917" />
+            {/* 口 */}
+            <path d="M75 92 Q80 96 85 92" stroke="#1c1917" strokeWidth="2.2" strokeLinecap="round" fill="none" />
 
-            {/* にっこり口元 */}
-            <path
-              d="M75 92 Q80 96 85 92"
-              stroke="#1c1917"
-              strokeWidth="2.2"
-              strokeLinecap="round"
-              fill="none"
-            />
+            {/* 瞳 */}
+            <circle cx="58" cy="80" r="5" fill="#1c1917" />
+            <circle cx="60" cy="78" r="2" fill="#ffffff" />
+            <circle cx="102" cy="80" r="5" fill="#1c1917" />
+            <circle cx="104" cy="78" r="2" fill="#ffffff" />
 
-            {/* くりくりのつぶらな瞳 */}
-            <g>
-              <circle cx="58" cy="80" r="5" fill="#1c1917" />
-              <circle cx="60" cy="78" r="2" fill="#ffffff" />
-              <circle cx="102" cy="80" r="5" fill="#1c1917" />
-              <circle cx="104" cy="78" r="2" fill="#ffffff" />
-            </g>
-
-            {/* ほんのりピンクのほっぺ */}
+            {/* ほっぺ */}
             <ellipse cx="44" cy="90" rx="6" ry="3.5" fill="#fca5a5" opacity="0.75" />
             <ellipse cx="116" cy="90" rx="6" ry="3.5" fill="#fca5a5" opacity="0.75" />
 
-            {/* シーン別・専門家別の衣装 & アイテム */}
-
-            {/* A. 買い物中：緑のエプロン & 買い物かご */}
+            {/* シーン衣装 */}
             {scene === 'shopping' && (
               <g>
-                {/* エプロン本体 */}
                 <path
                   d="M52 135 C52 125, 108 125, 108 135 L112 185 C112 195, 48 195, 48 185 Z"
                   fill="url(#shoppingApron)"
                   stroke="#065f46"
                   strokeWidth="1.5"
                 />
-                {/* エプロンの首紐 */}
                 <path d="M60 135 Q80 115 100 135" stroke="#065f46" strokeWidth="2.5" fill="none" />
-                {/* 胸ポケット & クローバーマーク */}
                 <rect x="70" y="145" width="20" height="15" rx="3" fill="#047857" />
                 <circle cx="80" cy="152" r="3" fill="#34d399" />
               </g>
             )}
 
-            {/* B. 調理前：オレンジのエプロン & シェフスカーフ */}
             {scene === 'after_shopping' && (
               <g>
-                {/* クッキングエプロン */}
                 <path
                   d="M52 135 C52 125, 108 125, 108 135 L112 185 C112 195, 48 195, 48 185 Z"
                   fill="url(#kitchenApron)"
@@ -506,48 +490,26 @@ export const CompanionSceneStage: React.FC<CompanionSceneStageProps> = ({
                   strokeWidth="1.5"
                 />
                 <path d="M60 135 Q80 115 100 135" stroke="#92400e" strokeWidth="2.5" fill="none" />
-                {/* スプーンマーク */}
                 <circle cx="80" cy="152" r="4" fill="#ffffff" opacity="0.8" />
               </g>
             )}
 
-            {/* 専門家モード装飾 */}
-
-            {/* 1. 鮮魚専門：ねじり鉢巻（青白） */}
+            {/* 専門家装飾 */}
             {expertMeta?.type === 'fish' && (
               <g>
-                <path
-                  d="M40 58 C60 48, 100 48, 120 58"
-                  stroke="#0284c7"
-                  strokeWidth="7"
-                  strokeLinecap="round"
-                />
-                <path
-                  d="M42 58 C62 48, 98 48, 118 58"
-                  stroke="#ffffff"
-                  strokeWidth="3"
-                  strokeLinecap="round"
-                  strokeDasharray="6 4"
-                />
-                {/* 結び目 */}
+                <path d="M40 58 C60 48, 100 48, 120 58" stroke="#0284c7" strokeWidth="7" strokeLinecap="round" />
+                <path d="M42 58 C62 48, 98 48, 118 58" stroke="#ffffff" strokeWidth="3" strokeLinecap="round" strokeDasharray="6 4" />
                 <circle cx="38" cy="60" r="4" fill="#0284c7" />
               </g>
             )}
 
-            {/* 2. 調理シェフ：コック帽 */}
             {expertMeta?.type === 'chef' && (
               <g>
-                <path
-                  d="M58 48 C50 30, 60 15, 80 15 C100 15, 110 30, 102 48 Z"
-                  fill="#ffffff"
-                  stroke="#d6d3d1"
-                  strokeWidth="2"
-                />
+                <path d="M58 48 C50 30, 60 15, 80 15 C100 15, 110 30, 102 48 Z" fill="#ffffff" stroke="#d6d3d1" strokeWidth="2" />
                 <rect x="62" y="44" width="36" height="8" rx="2" fill="#f5f5f4" stroke="#d6d3d1" />
               </g>
             )}
 
-            {/* 3. 目利き専門：虫眼鏡 */}
             {expertMeta?.type === 'bargain' && (
               <g transform="translate(100, 115) rotate(15)">
                 <circle cx="12" cy="12" r="10" fill="#67e8f9" fillOpacity="0.3" stroke="#eab308" strokeWidth="3" />
@@ -555,33 +517,79 @@ export const CompanionSceneStage: React.FC<CompanionSceneStageProps> = ({
               </g>
             )}
 
-            {/* 手足（ちいさな手） */}
+            {/* 手足 */}
             <ellipse cx="44" cy="142" rx="8" ry="7" fill="#44261c" />
             <ellipse cx="116" cy="142" rx="8" ry="7" fill="#44261c" />
-
-            {/* ちいさな足 */}
             <ellipse cx="64" cy="202" rx="12" ry="8" fill="#3b2219" />
             <ellipse cx="96" cy="202" rx="12" ry="8" fill="#3b2219" />
           </svg>
         </div>
 
-        {/* 考え中エフェクト（キャラクターの上部に浮かぶ思考バッジ） */}
-        {isTyping && (
-          <div className="absolute -top-7 left-1/2 -translate-x-1/2 z-20 flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/95 dark:bg-stone-900/95 backdrop-blur-md shadow-md border border-emerald-300 dark:border-emerald-700 text-[11px] font-bold text-emerald-800 dark:text-emerald-300 animate-bounce whitespace-nowrap">
-            <Sparkles className="w-3 h-3 text-emerald-600 dark:text-emerald-400 animate-spin" />
-            <span>考え中...</span>
-          </div>
-        )}
-
-        {/* ポコ太のネームプレート（世界の中にいるキャラクターの証） */}
-        <div className="mt-1 px-2.5 py-0.5 rounded-full bg-white/90 dark:bg-stone-900/90 backdrop-blur-xs border border-stone-200/90 dark:border-stone-700 shadow-2xs text-[11px] font-bold text-stone-800 dark:text-stone-100 flex items-center gap-1">
-          <span>ポコ太</span>
+        {/* ボコ太のネームタグ */}
+        <div className="-mt-1 mb-1 px-2 py-0.2 rounded-full bg-white/95 dark:bg-stone-900/95 backdrop-blur-xs border border-stone-200/90 dark:border-stone-700 shadow-2xs text-[10px] font-bold text-stone-800 dark:text-stone-100 flex items-center gap-1">
+          <span>ボコ太</span>
+          {expertMeta && (
+            <span className="text-[9px] text-emerald-700 dark:text-emerald-400 font-semibold">
+              · {expertMeta.label}
+            </span>
+          )}
         </div>
       </div>
 
-      {/* シーン下部の環境名バー（控えめな位置づけ） */}
-      <div className="absolute bottom-2 right-3 z-10 px-2.5 py-0.5 bg-black/45 backdrop-blur-xs text-white text-[10px] rounded-full font-medium shadow-2xs">
-        📍 {sceneConfig.name}
+      {/* ============================================================ */}
+      {/* 3. 右側：Statusカード（背景全面の上に載るフロートカード） */}
+      {/* ============================================================ */}
+      <div
+        id="scene-stage-status-card"
+        onClick={onOpenStatusDetail}
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            onOpenStatusDetail();
+          }
+        }}
+        title="タップして詳しいステータス・認識詳細を確認"
+        className="absolute top-2.5 right-2.5 sm:top-3 sm:right-3 bottom-2.5 sm:bottom-3 z-20 w-[180px] sm:w-[210px] md:w-[230px] bg-white/90 dark:bg-stone-900/90 hover:bg-white/95 dark:hover:bg-stone-900/95 backdrop-blur-md rounded-xl sm:rounded-2xl border border-white/80 dark:border-stone-700/80 shadow-md p-2.5 flex flex-col justify-between cursor-pointer transition-all active:scale-[0.99] group text-left"
+      >
+        {/* カード最上部：現在のシーン表示 */}
+        <div className="flex items-center justify-between border-b border-stone-200/80 dark:border-stone-800/80 pb-1.5 shrink-0">
+          <div className="flex items-center gap-1.5 min-w-0">
+            <span className="text-xs sm:text-sm font-bold text-stone-900 dark:text-stone-100 truncate">
+              {sceneHeader.title}
+            </span>
+          </div>
+          <span className="w-4 h-4 rounded-full bg-stone-100 dark:bg-stone-800 group-hover:bg-emerald-100 dark:group-hover:bg-emerald-950 flex items-center justify-center transition-colors shrink-0">
+            <ChevronRight className="w-3 h-3 text-stone-400 group-hover:text-emerald-700 dark:group-hover:text-emerald-300 transition-colors" />
+          </span>
+        </div>
+
+        {/* カード中央〜下部：現在の状態（食材・候補・決まったこと等） */}
+        <div className="flex-1 flex flex-col justify-center gap-1 py-1 min-h-0 overflow-hidden">
+          {displayStatusLines.map((item, idx) => (
+            <div
+              key={idx}
+              className="flex items-center gap-1.5 text-xs text-stone-800 dark:text-stone-200 min-w-0"
+            >
+              <span className="text-sm shrink-0 leading-none">{item.icon}</span>
+              <span className="truncate text-[11.5px] sm:text-xs font-medium leading-tight text-stone-700 dark:text-stone-300">
+                {item.text}
+              </span>
+              {item.badge && (
+                <span className="shrink-0 text-[9px] px-1 py-0.2 rounded bg-emerald-50 dark:bg-emerald-950/80 text-emerald-700 dark:text-emerald-300 font-semibold border border-emerald-200/60 dark:border-emerald-800/60">
+                  {item.badge}
+                </span>
+              )}
+            </div>
+          ))}
+        </div>
+
+        {/* 最下部の控えめなヒント */}
+        <div className="pt-1 border-t border-stone-100 dark:border-stone-800/60 flex items-center justify-between text-[10px] text-stone-400 dark:text-stone-500 shrink-0">
+          <span>状況タップで詳細</span>
+          <span className="text-[9px] font-mono opacity-70">STATUS</span>
+        </div>
       </div>
     </div>
   );
