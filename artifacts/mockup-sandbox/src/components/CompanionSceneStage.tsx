@@ -237,7 +237,7 @@ export const CompanionSceneStage: React.FC<CompanionSceneStageProps> = ({
     <div
       id="companion-scene-stage"
       aria-label="現在のシーンとステータス"
-      className="relative w-full h-44 sm:h-48 md:h-52 rounded-2xl overflow-hidden shadow-xs select-none border border-stone-200/90 dark:border-stone-800 transition-all"
+      className="relative w-full h-full min-h-[220px] rounded-2xl overflow-hidden shadow-xs select-none border border-stone-200/90 dark:border-stone-800 transition-all"
     >
       {/* ============================================================ */}
       {/* 1. 横長の背景（1つのシーンとして全面に広がる・左右分割なし） */}
@@ -246,45 +246,45 @@ export const CompanionSceneStage: React.FC<CompanionSceneStageProps> = ({
       {/* A. 計画中（自宅・リビング・夕方の机） */}
       {scene === 'planning' && (
         <div className="absolute inset-0 bg-gradient-to-b from-[#fcf5ec] via-[#f7e6d0] to-[#ecd3b5] overflow-hidden pointer-events-none">
-          {/* 夕暮れのアーチ窓（中央やや右寄りに配置） */}
-          <div className="absolute top-2 right-48 sm:right-64 w-28 h-36 rounded-t-full border-3 border-white/85 bg-gradient-to-b from-[#fcd34d] via-[#fb923c] to-[#fda4af] opacity-80 shadow-inner overflow-hidden">
+          {/* 夕暮れのアーチ窓（Statusの背後にも夕景が広がる） */}
+          <div className="absolute top-2 right-6 sm:right-16 w-32 sm:w-40 h-44 sm:h-52 rounded-t-full border-3 border-white/85 bg-gradient-to-b from-[#fcd34d] via-[#fb923c] to-[#fda4af] opacity-80 shadow-inner overflow-hidden">
             <div className="absolute top-0 bottom-0 left-1/2 w-0.5 bg-white/70" />
             <div className="absolute left-0 right-0 top-1/2 h-0.5 bg-white/70" />
-            <div className="absolute -bottom-2 -left-2 w-16 h-8 rounded-full bg-amber-800/20 blur-xs" />
-            <div className="absolute -bottom-3 right-0 w-20 h-10 rounded-full bg-amber-900/25 blur-xs" />
+            <div className="absolute -bottom-2 -left-2 w-20 h-10 rounded-full bg-amber-800/20 blur-xs" />
+            <div className="absolute -bottom-3 right-0 w-24 h-12 rounded-full bg-amber-900/25 blur-xs" />
           </div>
 
           {/* 天井のペンダントライト */}
-          <div className="absolute top-0 left-36 sm:left-48 -translate-x-1/2 flex flex-col items-center opacity-85">
-            <div className="w-0.5 h-6 bg-stone-500/60" />
-            <div className="w-10 h-5 rounded-t-full bg-stone-700 shadow-sm" />
-            <div className="w-7 h-1.5 rounded-b-full bg-amber-200 shadow-md" />
-            <div className="w-40 h-44 bg-gradient-to-b from-amber-300/20 to-transparent blur-md pointer-events-none -mt-1" />
+          <div className="absolute top-0 left-32 sm:left-44 -translate-x-1/2 flex flex-col items-center opacity-85">
+            <div className="w-0.5 h-8 bg-stone-500/60" />
+            <div className="w-12 h-6 rounded-t-full bg-stone-700 shadow-sm" />
+            <div className="w-8 h-2 rounded-b-full bg-amber-200 shadow-md" />
+            <div className="w-48 h-56 bg-gradient-to-b from-amber-300/20 to-transparent blur-md pointer-events-none -mt-1" />
           </div>
 
           {/* 壁の時計 */}
-          <div className="absolute top-4 left-6 sm:left-10 w-8 h-8 rounded-full border border-stone-400 bg-white/85 flex items-center justify-center shadow-2xs">
-            <div className="w-2.5 h-0.5 bg-stone-600 origin-right -rotate-45" />
-            <div className="w-2 h-0.5 bg-stone-600 origin-right rotate-45 absolute" />
+          <div className="absolute top-4 left-6 sm:left-10 w-9 h-9 rounded-full border border-stone-400 bg-white/85 flex items-center justify-center shadow-2xs">
+            <div className="w-3 h-0.5 bg-stone-600 origin-right -rotate-45" />
+            <div className="w-2.5 h-0.5 bg-stone-600 origin-right rotate-45 absolute" />
           </div>
 
           {/* 木目のダイニングテーブル（横長全面に広がる） */}
-          <div className="absolute bottom-0 left-0 right-0 h-18 sm:h-20 bg-gradient-to-t from-[#c29671] via-[#d4a984] to-[#deb592] border-t-3 border-[#ad7f58] shadow-md">
+          <div className="absolute bottom-0 left-0 right-0 h-22 sm:h-26 bg-gradient-to-t from-[#c29671] via-[#d4a984] to-[#deb592] border-t-3 border-[#ad7f58] shadow-md">
             {/* テーブル上の献立メモ */}
-            <div className="absolute top-2 left-28 sm:left-36 w-16 h-12 bg-amber-50 rounded shadow-xs border border-stone-300 -rotate-3 p-1 flex flex-col justify-between">
-              <span className="text-[7px] font-bold text-stone-600 border-b border-stone-200 pb-0.5">📖 メモ</span>
+            <div className="absolute top-2 left-32 sm:left-44 w-18 h-14 bg-amber-50 rounded shadow-xs border border-stone-300 -rotate-3 p-1.5 flex flex-col justify-between">
+              <span className="text-[8px] font-bold text-stone-600 border-b border-stone-200 pb-0.5">📖 メモ</span>
               <div className="space-y-0.5">
-                <div className="w-10 h-0.5 bg-stone-300 rounded" />
-                <div className="w-8 h-0.5 bg-stone-300 rounded" />
+                <div className="w-12 h-0.5 bg-stone-300 rounded" />
+                <div className="w-9 h-0.5 bg-stone-300 rounded" />
               </div>
-              <div className="absolute -right-1 top-1.5 w-8 h-0.5 bg-emerald-700 rounded-full rotate-12" />
+              <div className="absolute -right-1 top-2 w-9 h-0.5 bg-emerald-700 rounded-full rotate-12" />
             </div>
 
             {/* マグカップ */}
-            <div className="absolute top-1 left-48 sm:left-56 flex flex-col items-center">
-              <div className="w-0.5 h-2 bg-white/60 rounded-full blur-[0.5px] animate-pulse" />
-              <div className="w-5 h-6 rounded-b-lg bg-teal-600 border border-teal-700 shadow-xs relative">
-                <div className="absolute -right-1.5 top-1 w-2 h-3 rounded-r-full border border-teal-700" />
+            <div className="absolute top-2 left-54 sm:left-68 flex flex-col items-center">
+              <div className="w-0.5 h-2.5 bg-white/60 rounded-full blur-[0.5px] animate-pulse" />
+              <div className="w-6 h-7 rounded-b-lg bg-teal-600 border border-teal-700 shadow-xs relative">
+                <div className="absolute -right-1.5 top-1.5 w-2 h-3.5 rounded-r-full border border-teal-700" />
               </div>
             </div>
           </div>
@@ -302,24 +302,24 @@ export const CompanionSceneStage: React.FC<CompanionSceneStageProps> = ({
           </div>
 
           {/* 特売POPバナー */}
-          <div className="absolute top-6 left-28 sm:left-36 px-2 py-0.5 bg-red-600 text-yellow-300 font-extrabold text-[10px] rounded shadow-xs -rotate-3 border border-yellow-300 tracking-wider">
+          <div className="absolute top-5 left-32 sm:left-40 px-2.5 py-0.5 bg-red-600 text-yellow-300 font-extrabold text-[10px] sm:text-xs rounded shadow-xs -rotate-3 border border-yellow-300 tracking-wider z-0">
             ★ 本日特売市 ★
           </div>
 
-          {/* 陳列棚（中央から右奥に広がる） */}
-          <div className="absolute top-12 left-28 sm:left-36 right-48 sm:right-60 h-16 bg-white/85 rounded-lg border border-emerald-300/80 shadow-xs p-1.5 flex flex-col justify-between">
-            <div className="flex items-center justify-between px-1 text-[9px] font-bold text-emerald-800 border-b border-stone-200">
-              <span>新鮮野菜・青果</span>
-              <span className="text-stone-400 font-normal">産地直送</span>
+          {/* 陳列棚（中央から右端まで広がり、Statusの背後にも透けて見える） */}
+          <div className="absolute top-10 sm:top-12 left-32 sm:left-40 right-4 sm:right-6 h-18 sm:h-22 bg-white/75 dark:bg-stone-900/60 rounded-lg border border-emerald-300/70 shadow-xs p-1.5 flex flex-col justify-between">
+            <div className="flex items-center justify-between px-1 text-[9px] sm:text-[10px] font-bold text-emerald-800 dark:text-emerald-300 border-b border-stone-200 dark:border-stone-750">
+              <span>新鮮野菜・青果コーナー</span>
+              <span className="text-stone-500 dark:text-stone-400 font-normal">産地直送品</span>
             </div>
-            <div className="flex items-center justify-around text-base">
+            <div className="flex items-center justify-around text-base sm:text-lg">
               <span title="トマト">🍅</span>
               <span title="キャベツ">🥬</span>
               <span title="にんじん">🥕</span>
               <span title="たまねぎ">🧅</span>
               <span title="きのこ">🍄</span>
             </div>
-            <div className="flex items-center justify-around text-[8px] font-mono font-bold text-red-600 bg-red-50/80 rounded py-0.2">
+            <div className="flex items-center justify-around text-[8px] sm:text-[9px] font-mono font-bold text-red-600 bg-red-50/80 rounded py-0.5">
               <span>¥128</span>
               <span>¥158</span>
               <span>¥98</span>
@@ -328,14 +328,14 @@ export const CompanionSceneStage: React.FC<CompanionSceneStageProps> = ({
           </div>
 
           {/* 通路の床 */}
-          <div className="absolute bottom-0 left-0 right-0 h-18 sm:h-20 bg-gradient-to-t from-[#c6e6d4] to-[#dcf4e5] border-t-2 border-emerald-400/60">
+          <div className="absolute bottom-0 left-0 right-0 h-22 sm:h-26 bg-gradient-to-t from-[#c6e6d4] to-[#dcf4e5] border-t-2 border-emerald-400/60">
             <div className="w-full h-full opacity-30 bg-[radial-gradient(#059669_1px,transparent_1px)] [background-size:14px_14px]" />
             {/* 買い物カゴ */}
-            <div className="absolute bottom-2 left-28 sm:left-34 w-12 h-9 bg-red-500/90 rounded-b-lg border border-red-700 shadow-xs flex items-center justify-center">
-              <div className="w-8 h-5 border border-white/50 rounded flex flex-col justify-around">
+            <div className="absolute bottom-2 left-32 sm:left-40 w-13 h-10 bg-red-500/90 rounded-b-lg border border-red-700 shadow-xs flex items-center justify-center">
+              <div className="w-9 h-6 border border-white/50 rounded flex flex-col justify-around">
                 <div className="h-0.5 bg-white/60" />
               </div>
-              <div className="absolute -top-2 inset-x-1.5 h-3 border-2 border-red-700 rounded-t-full" />
+              <div className="absolute -top-2 inset-x-1.5 h-3.5 border-2 border-red-700 rounded-t-full" />
             </div>
           </div>
         </div>
@@ -347,28 +347,28 @@ export const CompanionSceneStage: React.FC<CompanionSceneStageProps> = ({
           {/* タイル壁 */}
           <div className="absolute inset-0 opacity-15 bg-[linear-gradient(to_right,#b45309_1px,transparent_1px),linear-gradient(to_bottom,#b45309_1px,transparent_1px)] [background-size:20px_20px]" />
 
-          {/* 調理器具ラック */}
-          <div className="absolute top-4 left-24 sm:left-32 right-48 sm:right-60 h-0.5 bg-stone-500 rounded flex items-center justify-around">
-            <div className="w-2.5 h-4 rounded-b-full bg-stone-700" title="おたま" />
-            <div className="w-2 h-5 rounded-b-sm bg-amber-800" title="木べら" />
-            <div className="w-3 h-4 rounded-b-full border border-stone-600" title="フライ返し" />
+          {/* 調理器具ラック（Statusの背後まで伸びる） */}
+          <div className="absolute top-5 left-30 sm:left-40 right-4 sm:right-8 h-0.5 bg-stone-500 rounded flex items-center justify-around">
+            <div className="w-3 h-5 rounded-b-full bg-stone-700" title="おたま" />
+            <div className="w-2.5 h-6 rounded-b-sm bg-amber-800" title="木べら" />
+            <div className="w-3.5 h-5 rounded-b-full border border-stone-600" title="フライ返し" />
           </div>
 
           {/* 調理台カウンター */}
-          <div className="absolute bottom-0 left-0 right-0 h-20 sm:h-22 bg-gradient-to-t from-[#e2e8f0] via-[#f1f5f9] to-[#ffffff] border-t-3 border-stone-300 shadow-md">
+          <div className="absolute bottom-0 left-0 right-0 h-22 sm:h-26 bg-gradient-to-t from-[#e2e8f0] via-[#f1f5f9] to-[#ffffff] border-t-3 border-stone-300 shadow-md">
             {/* まな板 */}
-            <div className="absolute top-2 left-28 sm:left-36 w-18 h-12 bg-[#fed7aa] rounded border border-[#ea580c]/30 shadow-xs rotate-1 p-1">
-              <div className="flex items-center gap-1">
-                <span className="text-xs">🥕</span>
-                <span className="text-[10px]">🧅</span>
+            <div className="absolute top-2 left-32 sm:left-40 w-20 h-13 bg-[#fed7aa] rounded border border-[#ea580c]/30 shadow-xs rotate-1 p-1">
+              <div className="flex items-center gap-1.5">
+                <span className="text-sm">🥕</span>
+                <span className="text-xs">🧅</span>
               </div>
-              <div className="absolute -right-2 top-1.5 w-10 h-2 bg-stone-300 border border-stone-400 rounded-r shadow-xs -rotate-6" />
+              <div className="absolute -right-2 top-2 w-11 h-2 bg-stone-300 border border-stone-400 rounded-r shadow-xs -rotate-6" />
             </div>
 
             {/* クラフト紙袋（ネギ・フランスパン） */}
-            <div className="absolute top-1 left-48 sm:left-58 w-12 h-16 bg-[#d97706] rounded-b shadow-sm border border-[#b45309] p-1">
-              <div className="absolute -top-5 left-1 text-base drop-shadow-xs -rotate-12">🥖</div>
-              <div className="absolute -top-6 right-1 text-base drop-shadow-xs rotate-6">🥬</div>
+            <div className="absolute top-1.5 left-56 sm:left-68 w-13 h-18 bg-[#d97706] rounded-b shadow-sm border border-[#b45309] p-1">
+              <div className="absolute -top-5 left-1 text-lg drop-shadow-xs -rotate-12">🥖</div>
+              <div className="absolute -top-6 right-1 text-lg drop-shadow-xs rotate-6">🥬</div>
             </div>
           </div>
         </div>
@@ -383,14 +383,14 @@ export const CompanionSceneStage: React.FC<CompanionSceneStageProps> = ({
       >
         {/* 考え中エフェクト（ボコ太の頭上にふわっと浮かぶ） */}
         {isTyping && (
-          <div className="mb-0.5 z-20 flex items-center gap-1 px-2 py-0.5 rounded-full bg-white/95 dark:bg-stone-900/95 backdrop-blur-md shadow-md border border-emerald-400 dark:border-emerald-600 text-[10px] font-bold text-emerald-800 dark:text-emerald-300 animate-bounce whitespace-nowrap">
-            <Sparkles className="w-2.5 h-2.5 text-emerald-600 dark:text-emerald-400 animate-spin" />
+          <div className="mb-1 z-20 flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-white/95 dark:bg-stone-900/95 backdrop-blur-md shadow-md border border-emerald-400 dark:border-emerald-600 text-[10px] sm:text-xs font-bold text-emerald-800 dark:text-emerald-300 animate-bounce whitespace-nowrap">
+            <Sparkles className="w-3 h-3 text-emerald-600 dark:text-emerald-400 animate-spin" />
             <span>考え中...</span>
           </div>
         )}
 
-        {/* ボコ太 SVGキャラクター（横長シーンに収まる絶妙なサイズ） */}
-        <div className="relative w-24 h-34 sm:w-28 sm:h-38 drop-shadow-md transition-transform hover:scale-[1.02]">
+        {/* ボコ太 SVGキャラクター（シーン拡大に合わせて大きく存在感アップ） */}
+        <div className="relative w-28 h-38 sm:w-34 sm:h-46 md:w-38 md:h-52 drop-shadow-md transition-transform hover:scale-[1.02]">
           <svg
             viewBox="0 0 160 220"
             className="w-full h-full"
@@ -537,7 +537,7 @@ export const CompanionSceneStage: React.FC<CompanionSceneStageProps> = ({
       </div>
 
       {/* ============================================================ */}
-      {/* 3. 右側：Statusカード（背景全面の上に載るフロートカード） */}
+      {/* 3. 右側：Statusカード（半透明ですりガラス・背景がしっかり透けて見える） */}
       {/* ============================================================ */}
       <div
         id="scene-stage-status-card"
@@ -551,33 +551,33 @@ export const CompanionSceneStage: React.FC<CompanionSceneStageProps> = ({
           }
         }}
         title="タップして詳しいステータス・認識詳細を確認"
-        className="absolute top-2.5 right-2.5 sm:top-3 sm:right-3 bottom-2.5 sm:bottom-3 z-20 w-[180px] sm:w-[210px] md:w-[230px] bg-white/90 dark:bg-stone-900/90 hover:bg-white/95 dark:hover:bg-stone-900/95 backdrop-blur-md rounded-xl sm:rounded-2xl border border-white/80 dark:border-stone-700/80 shadow-md p-2.5 flex flex-col justify-between cursor-pointer transition-all active:scale-[0.99] group text-left"
+        className="absolute top-2.5 right-2.5 sm:top-3 sm:right-3 bottom-2.5 sm:bottom-3 z-20 w-[170px] sm:w-[200px] md:w-[225px] bg-white/45 dark:bg-stone-950/45 hover:bg-white/55 dark:hover:bg-stone-950/55 backdrop-blur-md rounded-xl sm:rounded-2xl border border-white/60 dark:border-white/15 shadow-sm p-2.5 sm:p-3 flex flex-col justify-between cursor-pointer transition-all active:scale-[0.99] group text-left"
       >
         {/* カード最上部：現在のシーン表示 */}
-        <div className="flex items-center justify-between border-b border-stone-200/80 dark:border-stone-800/80 pb-1.5 shrink-0">
+        <div className="flex items-center justify-between border-b border-stone-800/10 dark:border-white/10 pb-1.5 shrink-0">
           <div className="flex items-center gap-1.5 min-w-0">
-            <span className="text-xs sm:text-sm font-bold text-stone-900 dark:text-stone-100 truncate">
+            <span className="text-xs sm:text-sm font-bold text-stone-950 dark:text-white truncate drop-shadow-[0_1px_1px_rgba(255,255,255,0.8)] dark:drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]">
               {sceneHeader.title}
             </span>
           </div>
-          <span className="w-4 h-4 rounded-full bg-stone-100 dark:bg-stone-800 group-hover:bg-emerald-100 dark:group-hover:bg-emerald-950 flex items-center justify-center transition-colors shrink-0">
-            <ChevronRight className="w-3 h-3 text-stone-400 group-hover:text-emerald-700 dark:group-hover:text-emerald-300 transition-colors" />
+          <span className="w-4 h-4 rounded-full bg-white/60 dark:bg-stone-800/60 group-hover:bg-emerald-100 dark:group-hover:bg-emerald-950 flex items-center justify-center transition-colors shrink-0 shadow-2xs">
+            <ChevronRight className="w-3 h-3 text-stone-600 dark:text-stone-300 group-hover:text-emerald-700 dark:group-hover:text-emerald-300 transition-colors" />
           </span>
         </div>
 
-        {/* カード中央〜下部：現在の状態（食材・候補・決まったこと等） */}
-        <div className="flex-1 flex flex-col justify-center gap-1 py-1 min-h-0 overflow-hidden">
+        {/* カード中央〜下部：現在の状態（半透明ピルで背景を透かしつつ文字をクリアに表示） */}
+        <div className="flex-1 flex flex-col justify-center gap-1.5 py-1 min-h-0 overflow-hidden">
           {displayStatusLines.map((item, idx) => (
             <div
               key={idx}
-              className="flex items-center gap-1.5 text-xs text-stone-800 dark:text-stone-200 min-w-0"
+              className="flex items-center gap-1.5 text-xs text-stone-900 dark:text-stone-100 min-w-0 bg-white/40 dark:bg-black/35 backdrop-blur-xs rounded-lg px-2 py-1 border border-white/40 dark:border-white/5 shadow-2xs"
             >
               <span className="text-sm shrink-0 leading-none">{item.icon}</span>
-              <span className="truncate text-[11.5px] sm:text-xs font-medium leading-tight text-stone-700 dark:text-stone-300">
+              <span className="truncate text-[11.5px] sm:text-xs font-semibold leading-tight text-stone-900 dark:text-stone-100 drop-shadow-[0_0.5px_0.5px_rgba(255,255,255,0.7)] dark:drop-shadow-[0_1px_1px_rgba(0,0,0,0.8)]">
                 {item.text}
               </span>
               {item.badge && (
-                <span className="shrink-0 text-[9px] px-1 py-0.2 rounded bg-emerald-50 dark:bg-emerald-950/80 text-emerald-700 dark:text-emerald-300 font-semibold border border-emerald-200/60 dark:border-emerald-800/60">
+                <span className="shrink-0 text-[9px] px-1 py-0.2 rounded bg-emerald-600/90 text-white font-bold shadow-2xs">
                   {item.badge}
                 </span>
               )}
@@ -586,9 +586,9 @@ export const CompanionSceneStage: React.FC<CompanionSceneStageProps> = ({
         </div>
 
         {/* 最下部の控えめなヒント */}
-        <div className="pt-1 border-t border-stone-100 dark:border-stone-800/60 flex items-center justify-between text-[10px] text-stone-400 dark:text-stone-500 shrink-0">
-          <span>状況タップで詳細</span>
-          <span className="text-[9px] font-mono opacity-70">STATUS</span>
+        <div className="pt-1 border-t border-stone-800/10 dark:border-white/10 flex items-center justify-between text-[10px] text-stone-700 dark:text-stone-300 font-medium shrink-0">
+          <span className="drop-shadow-2xs">状況タップで詳細</span>
+          <span className="text-[9px] font-mono font-bold text-stone-800 dark:text-stone-200 opacity-80">STATUS</span>
         </div>
       </div>
     </div>

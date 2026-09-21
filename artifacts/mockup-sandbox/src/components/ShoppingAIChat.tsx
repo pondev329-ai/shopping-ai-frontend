@@ -757,11 +757,11 @@ export const ShoppingAIChat: React.FC<ShoppingAIChatProps> = ({
         </div>
       </header>
 
-      {/* 2. メイン画面の横長シーン領域（背景＋左にボコ太＋右にStatus） */}
+      {/* 2. メイン画面の横長シーン領域（回答・会話領域と1:1の比率でゆったり配置） */}
       <section
         id="stage-scene-main"
         aria-label="現在のシーンとキャラクター"
-        className="shrink-0 px-2.5 py-2 sm:px-3.5 sm:py-2.5 bg-stone-100/90 dark:bg-stone-900/90 border-b border-stone-200 dark:border-stone-800 transition-colors"
+        className="flex-1 min-h-0 p-2 sm:p-2.5 bg-stone-100/90 dark:bg-stone-900/90 border-b border-stone-200 dark:border-stone-800 transition-colors flex flex-col"
       >
         <CompanionSceneStage
           scene={activeSession.currentScene || 'planning'}
@@ -772,11 +772,11 @@ export const ShoppingAIChat: React.FC<ShoppingAIChatProps> = ({
         />
       </section>
 
-      {/* 3. Shopping AIの返信 & 対話領域（十分な面積を確保） */}
+      {/* 3. Shopping AIの返信 & 対話領域（シーン領域と1:1の比率） */}
       <section
         id="stage-lower-dialogue"
         aria-label="Shopping AIの返信と対話"
-        className="flex-1 flex flex-col min-h-0 bg-white dark:bg-stone-900 transition-colors"
+        className="flex-1 min-h-0 flex flex-col bg-white dark:bg-stone-900 transition-colors"
       >
         {/* チャットメッセージ表示部 */}
         <main
