@@ -57,6 +57,24 @@ interface ShoppingAIChatProps {
   chatService?: ChatService;
 }
 
+export const PHOTO_INTERNAL_PROMPT =
+  'スーパーで見つけた商品・食材の写真です。現在の会話や候補と合わせて判断材料として教えてください。';
+
+export const getDisplayMessageContent = (content: string, imageUrl?: string): string => {
+  const trimmed = (content || '').trim();
+  if (
+    trimmed === PHOTO_INTERNAL_PROMPT ||
+    trimmed === 'スーパーで見つけた商品・食材の写真です。現在の会話や候補と合わせて判断材料として教えてください。' ||
+    (!trimmed && imageUrl)
+  ) {
+    return '写真';
+  }
+  if (trimmed.includes(PHOTO_INTERNAL_PROMPT) && trimmed.length <= PHOTO_INTERNAL_PROMPT.length + 5) {
+    return '写真';
+  }
+  return content;
+};
+
 export const ShoppingAIChat: React.FC<ShoppingAIChatProps> = ({
   chatService = defaultChatService,
 }) => {
@@ -399,14 +417,13 @@ export const ShoppingAIChat: React.FC<ShoppingAIChatProps> = ({
     const imageFilenameToSend = selectedImageFilename;
     if ((!textToSend && !imageToSend) || isTyping || isProcessingPhoto) return;
 
-    const messageContent =
-      textToSend ||
-      'スーパーで見つけた商品・食材の写真です。現在の会話や候補と合わせて判断材料として教えてください。';
+    const isPhotoOnly = !textToSend && !!imageToSend;
+    const displayContent = isPhotoOnly ? '写真' : textToSend;
 
     const userMessage: ChatMessage = {
       id: `msg-${Date.now()}-user`,
       role: 'user',
-      content: messageContent,
+      content: displayContent,
       timestamp: Date.now(),
       imageUrl: imageToSend || undefined,
     };
@@ -490,10 +507,11 @@ export const ShoppingAIChat: React.FC<ShoppingAIChatProps> = ({
     }
 
     try {
-      // Backendへ送信（現在セッションIDも伝達）
+      // Backendへ送信（現在セッションIDも伝達、写真のみ送信時は内部用補助文をバックエンドに連携）
+      const promptForBackend = isPhotoOnly ? PHOTO_INTERNAL_PROMPT : textToSend;
       const response = await chatService.sendMessage(
         newRecord,
-        messageContent,
+        promptForBackend,
         imageToSend || undefined,
         activeSession.id
       );
@@ -661,12 +679,9 @@ export const ShoppingAIChat: React.FC<ShoppingAIChatProps> = ({
     window.open(connectUrl, '_blank');
   };
 
-  // メイン画面に表示する「現在のやり取り」の抽出
-  // 通常画面は長大なチャットログ画面ではなく、「アシスタントとの最新の対話」を中心に据える
-  const recentDisplayMessages =
-    conversationRecord.length > 3 ? conversationRecord.slice(-3) : conversationRecord;
-  const pastMessageCount = conversationRecord.length - recentDisplayMessages.length;
+  // 返信欄用：通常のプレイ画面はチャット履歴UIではなく、「今のAIからの最新返答」を表示する
   const latestAssistantMsg = [...conversationRecord].reverse().find((m) => m.role === 'assistant');
+  const latestUserMsg = [...conversationRecord].reverse().find((m) => m.role === 'user');
 
   // 会話欄フォントサイズの基準定義（標準と大の差を明確化し、上部シーン文字との調和を保つ）
   const getMessageFontSizeClass = (size: typeof fontSize) => {
@@ -730,24 +745,8 @@ export const ShoppingAIChat: React.FC<ShoppingAIChatProps> = ({
             </button>
           </div>
 
-          {/* 右側：対話履歴 ＆ 新規セッション ＆ メニューボタン */}
+          {/* 右側：新規セッション ＆ メニューボタン（履歴ボタンは背景シーン左上に移動） */}
           <div className="flex items-center gap-1.5 shrink-0">
-            <button
-              type="button"
-              id="btn-header-conversation-history"
-              onClick={() => setShowConversationReview(true)}
-              className="flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-stone-600 dark:text-stone-300 hover:text-stone-900 dark:hover:text-stone-100 hover:bg-stone-100 dark:hover:bg-stone-800 active:bg-stone-200 dark:active:bg-stone-700 rounded-full transition-colors cursor-pointer border border-stone-200 dark:border-stone-700 shadow-2xs"
-              title="対話履歴を全件確認"
-            >
-              <History className="w-3.5 h-3.5 text-stone-500 dark:text-stone-400" />
-              <span>履歴</span>
-              {conversationRecord.length > 0 && (
-                <span className="text-[10px] text-stone-400 dark:text-stone-500 font-mono">
-                  ({conversationRecord.length})
-                </span>
-              )}
-            </button>
-
             <button
               type="button"
               id="btn-header-new-session"
@@ -785,6 +784,8 @@ export const ShoppingAIChat: React.FC<ShoppingAIChatProps> = ({
           statusSummary={activeSession.statusSummary}
           isTyping={isTyping}
           onOpenStatusDetail={() => setShowStatusDetailModal(true)}
+          onOpenHistory={() => setShowConversationReview(true)}
+          historyCount={conversationRecord.length}
         />
       </section>
 
@@ -794,20 +795,39 @@ export const ShoppingAIChat: React.FC<ShoppingAIChatProps> = ({
         aria-label="Shopping AIの返信と対話"
         className="flex-1 min-h-0 flex flex-col bg-white dark:bg-stone-900 transition-colors"
       >
-        {/* チャットメッセージ表示部 */}
+        {/* チャットメッセージ表示部：過去の返信は積み重ねず、現在の最新返信だけを表示 */}
         <main
           id="chat-messages-container"
           className="flex-1 overflow-y-auto p-2.5 sm:p-4 space-y-3 overscroll-contain bg-stone-50/40 dark:bg-stone-950/40 transition-colors"
         >
-          {/* 直近の対話メッセージ表示 */}
-          {recentDisplayMessages.map((msg) => (
-            <div
-              key={msg.id}
-              id={`message-row-${msg.id}`}
-              className={`flex flex-col w-full ${msg.role === 'user' ? 'items-end' : 'items-start'}`}
-            >
-              {/* アシスタント発話ヘッダー */}
-              {msg.role === 'assistant' && (
+          {/* A. AI思考中（送信後〜返答受信までの状態）：直前の相談とポコ太の考え中インジケータ */}
+          {isTyping ? (
+            <div className="space-y-3 animate-in fade-in duration-150">
+              {/* 直前のユーザー相談 */}
+              {latestUserMsg && (
+                <div className="flex flex-col items-end w-full">
+                  <div className="relative w-full sm:max-w-[92%] rounded-2xl px-3.5 sm:px-4 py-3 bg-emerald-600 text-white rounded-tr-xs shadow-xs font-normal break-words whitespace-pre-wrap">
+                    {latestUserMsg.imageUrl && (
+                      <div className="mb-2.5 overflow-hidden rounded-xl bg-black/15">
+                        <img
+                          src={latestUserMsg.imageUrl}
+                          alt="相談写真"
+                          className="w-full max-h-56 object-cover rounded-xl cursor-pointer hover:opacity-90 active:scale-[0.99] transition-all"
+                          onClick={() => setPreviewModalImage(latestUserMsg.imageUrl || null)}
+                        />
+                        <div className="flex items-center justify-end px-1.5 py-1 text-[11px] opacity-85 gap-1 text-white">
+                          <ZoomIn className="w-3 h-3" />
+                          <span>タップして拡大</span>
+                        </div>
+                      </div>
+                    )}
+                    {getDisplayMessageContent(latestUserMsg.content, latestUserMsg.imageUrl)}
+                  </div>
+                </div>
+              )}
+
+              {/* ポコ太の思考中インジケータ */}
+              <div className="flex flex-col items-start w-full">
                 <div className="flex items-center gap-1.5 mb-1 pl-1">
                   <div className="w-5 h-5 rounded-full bg-emerald-600 text-white flex items-center justify-center text-[10px] font-bold shadow-2xs shrink-0">
                     ポ
@@ -821,25 +841,65 @@ export const ShoppingAIChat: React.FC<ShoppingAIChatProps> = ({
                     </span>
                   )}
                 </div>
+
+                <div className="flex items-center gap-2 bg-white dark:bg-stone-800 border border-stone-200 dark:border-stone-700 rounded-2xl rounded-tl-xs px-4 py-3 text-stone-600 dark:text-stone-300 text-xs shadow-2xs">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-bounce" style={{ animationDelay: '0ms' }} />
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-bounce" style={{ animationDelay: '150ms' }} />
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-bounce" style={{ animationDelay: '300ms' }} />
+                  <span className="ml-1 font-medium">ポコ太が回答を考え中...</span>
+                </div>
+              </div>
+            </div>
+          ) : latestAssistantMsg ? (
+            /* B. 通常時：最新のAI返信のみを表示（過去の返信は積み重ねず置き換える） */
+            <div
+              key={latestAssistantMsg.id}
+              id={`message-row-${latestAssistantMsg.id}`}
+              className="flex flex-col w-full items-start animate-in fade-in duration-150"
+            >
+              {/* 直前の相談コンテキスト（写真のみ送信の場合は「写真」） */}
+              {latestUserMsg && (
+                <div className="flex items-center gap-1.5 mb-2 px-2.5 py-1 rounded-lg bg-stone-100/90 dark:bg-stone-800/80 border border-stone-200/80 dark:border-stone-700/80 text-xs text-stone-600 dark:text-stone-400 w-fit max-w-full">
+                  <span className="font-semibold text-emerald-700 dark:text-emerald-400 shrink-0">相談:</span>
+                  <span className="truncate max-w-[240px] sm:max-w-md font-medium text-stone-800 dark:text-stone-200">
+                    {getDisplayMessageContent(latestUserMsg.content, latestUserMsg.imageUrl)}
+                  </span>
+                  {latestUserMsg.imageUrl && (
+                    <span className="shrink-0 text-[10px] bg-emerald-100 dark:bg-emerald-950/80 text-emerald-800 dark:text-emerald-300 px-1.5 py-0.2 rounded font-medium border border-emerald-200 dark:border-emerald-800">
+                      写真あり
+                    </span>
+                  )}
+                </div>
               )}
+
+              {/* アシスタント発話ヘッダー */}
+              <div className="flex items-center gap-1.5 mb-1 pl-1">
+                <div className="w-5 h-5 rounded-full bg-emerald-600 text-white flex items-center justify-center text-[10px] font-bold shadow-2xs shrink-0">
+                  ポ
+                </div>
+                <span className="text-xs font-bold text-stone-800 dark:text-stone-200">
+                  ポコ太
+                </span>
+                {activeSession.expertMode && (
+                  <span className="text-[10px] bg-purple-100 dark:bg-purple-950/80 text-purple-800 dark:text-purple-300 px-1.5 py-0.2 rounded font-semibold border border-purple-200 dark:border-purple-800">
+                    {activeSession.expertMode}専門
+                  </span>
+                )}
+              </div>
 
               {/* Balloon: スマホでは横幅いっぱいにフィット (w-full max-w-full) */}
               <div
                 className={`relative w-full sm:max-w-[92%] rounded-2xl px-3.5 sm:px-4 py-3 ${getMessageFontSizeClass(
                   fontSize
-                )} break-words whitespace-pre-wrap transition-all ${
-                  msg.role === 'user'
-                    ? 'bg-emerald-600 text-white rounded-tr-xs shadow-xs font-normal'
-                    : 'bg-white dark:bg-stone-800 text-stone-800 dark:text-stone-100 border border-stone-200 dark:border-stone-700 rounded-tl-xs shadow-2xs group'
-                }`}
+                )} break-words whitespace-pre-wrap transition-all bg-white dark:bg-stone-800 text-stone-800 dark:text-stone-100 border border-stone-200 dark:border-stone-700 rounded-tl-xs shadow-2xs group`}
               >
-                {msg.imageUrl && (
+                {latestAssistantMsg.imageUrl && (
                   <div className="mb-2.5 overflow-hidden rounded-xl bg-black/15">
                     <img
-                      src={msg.imageUrl}
+                      src={latestAssistantMsg.imageUrl}
                       alt="相談写真"
                       className="w-full max-h-60 object-cover rounded-xl cursor-pointer hover:opacity-90 active:scale-[0.99] transition-all"
-                      onClick={() => setPreviewModalImage(msg.imageUrl || null)}
+                      onClick={() => setPreviewModalImage(latestAssistantMsg.imageUrl || null)}
                     />
                     <div className="flex items-center justify-end px-1.5 py-1 text-[11px] opacity-85 gap-1 text-white">
                       <ZoomIn className="w-3 h-3" />
@@ -847,27 +907,27 @@ export const ShoppingAIChat: React.FC<ShoppingAIChatProps> = ({
                     </div>
                   </div>
                 )}
-                {msg.content}
+                {getDisplayMessageContent(latestAssistantMsg.content, latestAssistantMsg.imageUrl)}
               </div>
 
               {/* Inline Decision Support (AI側のみ) */}
-              {msg.role === 'assistant' && msg.decisionData && (
+              {latestAssistantMsg.decisionData && (
                 <div className="w-full sm:max-w-[92%] mt-2.5 space-y-2.5">
                   {/* 状況整理タグ (Context Understanding) */}
-                  {msg.decisionData.contextSummary && (
+                  {latestAssistantMsg.decisionData.contextSummary && (
                     <div className="bg-stone-100/90 dark:bg-stone-800/90 rounded-xl p-2.5 border border-stone-200 dark:border-stone-700 text-xs text-stone-600 dark:text-stone-300 space-y-1">
                       <div className="font-medium text-stone-700 dark:text-stone-200 flex items-center gap-1.5 mb-1">
                         <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
                         理解した条件:
                       </div>
                       <div className="flex flex-wrap gap-1.5 pt-0.5">
-                        {msg.decisionData.contextSummary.timeLimit && (
+                        {latestAssistantMsg.decisionData.contextSummary.timeLimit && (
                           <span className="inline-flex items-center gap-1 bg-white dark:bg-stone-900 px-2 py-0.5 rounded-md border border-stone-200 dark:border-stone-700 font-medium text-stone-700 dark:text-stone-200 text-[11px]">
                             <Clock className="w-3 h-3 text-stone-500 dark:text-stone-400" />
-                            {msg.decisionData.contextSummary.timeLimit}
+                            {latestAssistantMsg.decisionData.contextSummary.timeLimit}
                           </span>
                         )}
-                        {msg.decisionData.contextSummary.availableIngredients?.map((ing, idx) => (
+                        {latestAssistantMsg.decisionData.contextSummary.availableIngredients?.map((ing, idx) => (
                           <span
                             key={idx}
                             className="inline-flex items-center gap-1 bg-white dark:bg-stone-900 px-2 py-0.5 rounded-md border border-stone-200 dark:border-stone-700 font-medium text-stone-700 dark:text-stone-200 text-[11px]"
@@ -876,9 +936,9 @@ export const ShoppingAIChat: React.FC<ShoppingAIChatProps> = ({
                             {ing}
                           </span>
                         ))}
-                        {msg.decisionData.contextSummary.moodOrPreference && (
+                        {latestAssistantMsg.decisionData.contextSummary.moodOrPreference && (
                           <span className="inline-flex items-center gap-1 bg-white dark:bg-stone-900 px-2 py-0.5 rounded-md border border-stone-200 dark:border-stone-700 font-medium text-stone-700 dark:text-stone-200 text-[11px]">
-                            {msg.decisionData.contextSummary.moodOrPreference}
+                            {latestAssistantMsg.decisionData.contextSummary.moodOrPreference}
                           </span>
                         )}
                       </div>
@@ -886,13 +946,13 @@ export const ShoppingAIChat: React.FC<ShoppingAIChatProps> = ({
                   )}
 
                   {/* 選択肢カード (ユーザーが選べる可能性の提示) */}
-                  {msg.decisionData.options && msg.decisionData.options.length > 0 && (
+                  {latestAssistantMsg.decisionData.options && latestAssistantMsg.decisionData.options.length > 0 && (
                     <div className="space-y-1.5">
                       <p className="text-[11px] font-semibold text-stone-500 dark:text-stone-400 px-1">
                         現在の候補・選択肢（タップして深掘り）:
                       </p>
                       <div className="grid grid-cols-1 gap-1.5">
-                        {msg.decisionData.options.map((opt) => (
+                        {latestAssistantMsg.decisionData.options.map((opt) => (
                           <button
                             key={opt.id}
                             id={`btn-option-${opt.id}`}
@@ -933,28 +993,23 @@ export const ShoppingAIChat: React.FC<ShoppingAIChatProps> = ({
                 </div>
               )}
 
-            {/* メッセージフッター（回答欄下側：左側にコピー、その横に返信候補ボタン、右側に時刻） */}
-            <div
-              className={`flex items-center gap-2 mt-1.5 px-1 text-[11px] text-stone-400 dark:text-stone-500 w-full sm:max-w-[92%] ${
-                msg.role === 'user' ? 'justify-end' : 'justify-between'
-              }`}
-            >
-              {msg.role === 'assistant' ? (
+              {/* メッセージフッター（回答欄下側：左側にコピー、その横に返信候補ボタン、右側に時刻） */}
+              <div className="flex items-center justify-between gap-2 mt-1.5 px-1 text-[11px] text-stone-400 dark:text-stone-500 w-full sm:max-w-[92%]">
                 <div className="flex items-center gap-1.5 flex-wrap">
                   {/* コピーボタン（回答欄の左下に常に固定） */}
                   <button
                     type="button"
-                    id={`btn-copy-msg-${msg.id}`}
-                    onClick={() => handleCopyMessage(msg.id, msg.content)}
+                    id={`btn-copy-msg-${latestAssistantMsg.id}`}
+                    onClick={() => handleCopyMessage(latestAssistantMsg.id, latestAssistantMsg.content)}
                     className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full transition-all cursor-pointer active:scale-95 border text-xs shadow-2xs shrink-0 ${
-                      copiedMessageId === msg.id
+                      copiedMessageId === latestAssistantMsg.id
                         ? 'bg-emerald-50 dark:bg-emerald-950/80 text-emerald-700 dark:text-emerald-300 border-emerald-300 dark:border-emerald-700 font-medium'
                         : 'bg-white dark:bg-stone-800 text-stone-600 dark:text-stone-300 hover:text-stone-900 dark:hover:text-stone-100 hover:bg-stone-100 dark:hover:bg-stone-700 border-stone-200 dark:border-stone-700'
                     }`}
                     title="メッセージ内容をワンタップでコピー"
                     aria-label="返信内容をコピー"
                   >
-                    {copiedMessageId === msg.id ? (
+                    {copiedMessageId === latestAssistantMsg.id ? (
                       <>
                         <Check className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
                         <span className="text-[10.5px]">コピー完了</span>
@@ -968,16 +1023,16 @@ export const ShoppingAIChat: React.FC<ShoppingAIChatProps> = ({
                   </button>
 
                   {/* 返信候補ボタン（コピーの横に1行で並べて配置） */}
-                  {msg.decisionData?.quickReplies && msg.decisionData.quickReplies.length > 0 && (
+                  {latestAssistantMsg.decisionData?.quickReplies && latestAssistantMsg.decisionData.quickReplies.length > 0 && (
                     <button
                       type="button"
-                      id={`btn-toggle-quick-replies-${msg.id}`}
-                      onClick={() => toggleQuickReplies(msg.id)}
+                      id={`btn-toggle-quick-replies-${latestAssistantMsg.id}`}
+                      onClick={() => toggleQuickReplies(latestAssistantMsg.id)}
                       className="inline-flex items-center gap-1 text-[11px] font-medium text-stone-500 hover:text-emerald-700 dark:text-stone-400 dark:hover:text-emerald-400 bg-stone-100/90 dark:bg-stone-800/90 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 border border-stone-200 dark:border-stone-700 rounded-full px-2.5 py-0.5 transition-all cursor-pointer shadow-2xs shrink-0"
                     >
                       <Sparkles className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
-                      <span>返信候補 ({msg.decisionData.quickReplies.length})</span>
-                      {expandedQuickReplies[msg.id] ? (
+                      <span>返信候補 ({latestAssistantMsg.decisionData.quickReplies.length})</span>
+                      {expandedQuickReplies[latestAssistantMsg.id] ? (
                         <ChevronUp className="w-3 h-3 ml-0.5 text-stone-400" />
                       ) : (
                         <ChevronDown className="w-3 h-3 ml-0.5 text-stone-400" />
@@ -985,48 +1040,40 @@ export const ShoppingAIChat: React.FC<ShoppingAIChatProps> = ({
                     </button>
                   )}
                 </div>
-              ) : null}
 
-              <span className="text-[10px] text-stone-400 dark:text-stone-500 font-mono shrink-0 ml-auto">
-                {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-              </span>
+                <span className="text-[10px] text-stone-400 dark:text-stone-500 font-mono shrink-0 ml-auto">
+                  {new Date(latestAssistantMsg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                </span>
+              </div>
+
+              {/* 返信候補が展開された場合のチップ一覧（下部にスライド展開） */}
+              {latestAssistantMsg.decisionData?.quickReplies &&
+                latestAssistantMsg.decisionData.quickReplies.length > 0 &&
+                expandedQuickReplies[latestAssistantMsg.id] && (
+                  <div className="w-full sm:max-w-[92%] mt-1.5 pl-0.5 flex flex-wrap gap-1.5 animate-in fade-in slide-in-from-top-1 duration-150">
+                    {latestAssistantMsg.decisionData.quickReplies.map((reply, i) => (
+                      <button
+                        key={i}
+                        id={`btn-quick-reply-${i}`}
+                        onClick={() => handleSend(reply)}
+                        className={`${
+                          fontSize === 'large' || fontSize === 'extra_large' ? 'text-[13px]' : 'text-xs'
+                        } bg-white dark:bg-stone-800 active:bg-stone-100 dark:active:bg-stone-700 text-stone-700 dark:text-stone-200 border border-stone-300 dark:border-stone-600 hover:border-emerald-600 dark:hover:border-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300 px-3 py-1.5 rounded-full transition-colors shadow-2xs cursor-pointer font-normal`}
+                      >
+                        {reply}
+                      </button>
+                    ))}
+                  </div>
+                )}
             </div>
+          ) : (
+            <div className="text-center py-10 text-stone-400 dark:text-stone-500 text-xs">
+              ポコ太へメッセージや写真をお送りください。
+            </div>
+          )}
 
-            {/* 返信候補が展開された場合のチップ一覧（下部にスライド展開） */}
-            {msg.role === 'assistant' &&
-              msg.decisionData?.quickReplies &&
-              msg.decisionData.quickReplies.length > 0 &&
-              expandedQuickReplies[msg.id] && (
-                <div className="w-full sm:max-w-[92%] mt-1.5 pl-0.5 flex flex-wrap gap-1.5 animate-in fade-in slide-in-from-top-1 duration-150">
-                  {msg.decisionData.quickReplies.map((reply, i) => (
-                    <button
-                      key={i}
-                      id={`btn-quick-reply-${i}`}
-                      onClick={() => handleSend(reply)}
-                      className={`${
-                        fontSize === 'large' || fontSize === 'extra_large' ? 'text-[13px]' : 'text-xs'
-                      } bg-white dark:bg-stone-800 active:bg-stone-100 dark:active:bg-stone-700 text-stone-700 dark:text-stone-200 border border-stone-300 dark:border-stone-600 hover:border-emerald-600 dark:hover:border-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300 px-3 py-1.5 rounded-full transition-colors shadow-2xs cursor-pointer font-normal`}
-                    >
-                      {reply}
-                    </button>
-                  ))}
-                </div>
-              )}
-          </div>
-        ))}
-
-        {/* AI Typing Indicator */}
-        {isTyping && (
-          <div className="flex items-center gap-1.5 bg-white dark:bg-stone-800 border border-stone-200 dark:border-stone-700 rounded-2xl rounded-tl-xs px-4 py-2.5 w-fit text-stone-400 dark:text-stone-400 text-xs shadow-2xs">
-            <span className="w-1.5 h-1.5 rounded-full bg-stone-400 dark:bg-stone-500 animate-bounce" style={{ animationDelay: '0ms' }} />
-            <span className="w-1.5 h-1.5 rounded-full bg-stone-400 dark:bg-stone-500 animate-bounce" style={{ animationDelay: '150ms' }} />
-            <span className="w-1.5 h-1.5 rounded-full bg-stone-400 dark:bg-stone-500 animate-bounce" style={{ animationDelay: '300ms' }} />
-            <span className="ml-1 text-stone-500 dark:text-stone-400">アシスタントが考え中...</span>
-          </div>
-        )}
-
-        <div ref={messagesEndRef} />
-      </main>
+          <div ref={messagesEndRef} />
+        </main>
 
       {/* 5. Input Form (ChatGPTスタイル: 通常時は ＋ メッセージ… 📷 ↑ のコンパクトな1行) */}
       <footer id="chat-input-footer" className="p-2 sm:p-2.5 bg-white dark:bg-stone-900 border-t border-stone-200 dark:border-stone-800 shrink-0 transition-colors relative">

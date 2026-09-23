@@ -8,6 +8,7 @@ import {
   Tag,
   Sparkles,
   ChevronRight,
+  History,
 } from 'lucide-react';
 
 interface CompanionSceneStageProps {
@@ -16,6 +17,8 @@ interface CompanionSceneStageProps {
   statusSummary?: SessionStatusSummary;
   isTyping?: boolean;
   onOpenStatusDetail: () => void;
+  onOpenHistory?: () => void;
+  historyCount?: number;
 }
 
 /**
@@ -101,6 +104,8 @@ export const CompanionSceneStage: React.FC<CompanionSceneStageProps> = ({
   statusSummary,
   isTyping = false,
   onOpenStatusDetail,
+  onOpenHistory,
+  historyCount,
 }) => {
   const expertMeta = getExpertMeta(expertMode);
 
@@ -375,7 +380,28 @@ export const CompanionSceneStage: React.FC<CompanionSceneStageProps> = ({
       )}
 
       {/* ============================================================ */}
-      {/* 2. 左側：ポコ太（現在のシーン世界の中に立つアシスタント） */}
+      {/* 2. 左上：対話履歴ボタン（ポコ太と重ならず、Statusと対をなす半透明デザイン） */}
+      {/* ============================================================ */}
+      {onOpenHistory && (
+        <button
+          type="button"
+          id="btn-scene-conversation-history"
+          onClick={onOpenHistory}
+          title="これまでの会話履歴を振り返る"
+          className="absolute top-2.5 left-2.5 sm:top-3 sm:left-3 z-30 flex items-center gap-1.5 px-3 py-1.5 rounded-xl sm:rounded-2xl bg-white/50 dark:bg-stone-950/50 hover:bg-white/65 dark:hover:bg-stone-950/65 active:scale-95 backdrop-blur-md border border-white/60 dark:border-white/15 shadow-sm text-xs font-bold text-stone-800 dark:text-stone-100 transition-all cursor-pointer select-none"
+        >
+          <History className="w-3.5 h-3.5 text-stone-700 dark:text-stone-300" />
+          <span>履歴</span>
+          {historyCount !== undefined && historyCount > 0 && (
+            <span className="text-[10px] text-stone-500 dark:text-stone-400 font-mono">
+              ({historyCount})
+            </span>
+          )}
+        </button>
+      )}
+
+      {/* ============================================================ */}
+      {/* 3. 左側：ポコ太（現在のシーン世界の中に立つアシスタント） */}
       {/* ============================================================ */}
       <div
         id="scene-character-container"

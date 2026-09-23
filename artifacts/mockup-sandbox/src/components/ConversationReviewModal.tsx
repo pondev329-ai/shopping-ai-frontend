@@ -17,6 +17,24 @@ import {
 import { ChatMessage } from '../types/chat';
 import { ChatService } from '../services/chatService';
 
+const PHOTO_INTERNAL_PROMPT =
+  'スーパーで見つけた商品・食材の写真です。現在の会話や候補と合わせて判断材料として教えてください。';
+
+const getDisplayMessageContent = (content: string, imageUrl?: string): string => {
+  const trimmed = (content || '').trim();
+  if (
+    trimmed === PHOTO_INTERNAL_PROMPT ||
+    trimmed === 'スーパーで見つけた商品・食材の写真です。現在の会話や候補と合わせて判断材料として教えてください。' ||
+    (!trimmed && imageUrl)
+  ) {
+    return '写真';
+  }
+  if (trimmed.includes(PHOTO_INTERNAL_PROMPT) && trimmed.length <= PHOTO_INTERNAL_PROMPT.length + 5) {
+    return '写真';
+  }
+  return content;
+};
+
 interface ConversationReviewModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -172,11 +190,13 @@ export const ConversationReviewModal: React.FC<ConversationReviewModalProps> = (
 
   const filteredMessages = activeRecord.filter((msg) => {
     if (!searchQuery.trim()) return true;
-    return msg.content.toLowerCase().includes(searchQuery.toLowerCase().trim());
+    const display = getDisplayMessageContent(msg.content, msg.imageUrl);
+    return display.toLowerCase().includes(searchQuery.toLowerCase().trim());
   });
 
-  const handleCopy = (id: string, text: string) => {
-    navigator.clipboard?.writeText(text);
+  const handleCopy = (id: string, text: string, imageUrl?: string) => {
+    const displayText = getDisplayMessageContent(text, imageUrl);
+    navigator.clipboard?.writeText(displayText);
     setCopiedId(id);
     setTimeout(() => setCopiedId(null), 2000);
   };
@@ -362,7 +382,7 @@ export const ConversationReviewModal: React.FC<ConversationReviewModalProps> = (
                     </span>
                     <button
                       type="button"
-                      onClick={() => handleCopy(msg.id, msg.content)}
+                      onClick={() => handleCopy(msg.id, msg.content, msg.imageUrl)}
                       className="p-1 text-stone-400 hover:text-stone-700 dark:hover:text-stone-200 hover:bg-stone-100 dark:hover:bg-stone-700 rounded cursor-pointer"
                       title="テキストをコピー"
                     >
@@ -390,7 +410,9 @@ export const ConversationReviewModal: React.FC<ConversationReviewModalProps> = (
                   </div>
                 )}
 
-                <div className="whitespace-pre-wrap break-words">{msg.content}</div>
+                <div className="whitespace-pre-wrap break-words">
+                  {getDisplayMessageContent(msg.content, msg.imageUrl)}
+                </div>
               </div>
             ))
           )}
