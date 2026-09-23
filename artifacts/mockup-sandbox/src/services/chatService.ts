@@ -116,6 +116,9 @@ interface JinbaBackendRunResponse {
   error?: string;
 }
 
+export const PHOTO_INTERNAL_PROMPT =
+  'スーパーで見つけた商品・食材の写真です。現在の会話や候補と合わせて判断材料として教えてください。';
+
 /**
  * RenderBackendChatAdapter
  * 
@@ -130,6 +133,7 @@ export class RenderBackendChatAdapter implements ChatService {
   private readonly STORAGE_KEY = 'shopping_ai_backend_state';
   private readonly MEMORY_STORAGE_KEY = 'shopping_ai_memory_connection_id';
   private memoryListeners: Set<(id: string | null) => void> = new Set();
+  private sessionImageDataUrlCache = new Map<string, string>();
 
   constructor(endpoint?: string) {
     // Vite開発環境のプロキシ (/api/render-backend) または環境変数/直接URL
@@ -767,6 +771,117 @@ export class RenderBackendChatAdapter implements ChatService {
       // 時系列順（occurred_at / timestamp の昇順）でソートし、user -> assistant の対話順序を確実に保持
       messages.sort((a, b) => a.timestamp - b.timestamp);
 
+      // --- Session Image の取得と写真メッセージへの対応付け ---
+      // Shopping AIでは Conversation Record と Session Image が別保存されているため、
+      // 同じsession_idのSession Image一覧を取得し、写真を送ったターンと対応付けて imageUrl を復元する。
+      let sessionImagesTotal = 0;
+      let matchedImagesCount = 0;
+
+      try {
+        const imageListRes = await this.listSessionImages({
+          sessionId,
+          connectionId: activeConnectionId,
+        });
+
+        if (imageListRes.success && Array.isArray(imageListRes.items) && imageListRes.items.length > 0) {
+          sessionImagesTotal = imageListRes.items.length;
+
+          // 作成日時の昇順でソート（時系列順）
+          const sortedImages = [...imageListRes.items].sort((a, b) => {
+            const timeA = a.created_at ? Date.parse(a.created_at) : 0;
+            const timeB = b.created_at ? Date.parse(b.created_at) : 0;
+            return timeA - timeB;
+          });
+
+          // 写真を送信したメッセージを抽出（ユーザーのメッセージで、かつ写真プロンプトまたは写真送信と判定されるもの）
+          const photoMessages = messages.filter((m) => {
+            if (m.imageUrl) return false; // 既に画像がある場合はスキップ
+            if (m.role !== 'user') return false;
+            const text = (m.content || '').trim();
+            const rec = records.find((r) => r.event_id === m.id);
+            const meta = rec?.metadata as Record<string, unknown> | undefined;
+
+            const isPromptMatch =
+              text === '写真' ||
+              text === PHOTO_INTERNAL_PROMPT ||
+              text.includes('スーパーで見つけた商品・食材の写真') ||
+              text.includes('写真です');
+
+            const isMetaMatch =
+              meta &&
+              (meta.memory_type === 'saved_photo' ||
+                meta.image_kind ||
+                meta.image_url ||
+                meta.imageUrl ||
+                meta.has_image ||
+                meta.filename);
+
+            return Boolean(isPromptMatch || isMetaMatch);
+          });
+
+          // 各写真メッセージに対して Session Image を対応付け
+          const usedFileIds = new Set<string>();
+
+          for (let pIdx = 0; pIdx < photoMessages.length; pIdx++) {
+            const pMsg = photoMessages[pIdx];
+
+            // 1. event_id の完全一致を優先探索
+            let targetImage = sortedImages.find(
+              (img) => !usedFileIds.has(img.drive_file_id) && img.event_id && img.event_id === pMsg.id
+            );
+
+            // 2. なければ時系列順（インデックス順）で空いているSession Imageを割り当て
+            if (!targetImage) {
+              targetImage = sortedImages.find((img) => !usedFileIds.has(img.drive_file_id));
+            }
+
+            if (targetImage && targetImage.drive_file_id) {
+              usedFileIds.add(targetImage.drive_file_id);
+
+              // キャッシュ確認または getSessionImage による画像データ取得
+              let dataUrl = this.sessionImageDataUrlCache.get(targetImage.drive_file_id);
+              if (!dataUrl) {
+                try {
+                  const getImgRes = await this.getSessionImage({
+                    sessionId,
+                    driveFileId: targetImage.drive_file_id,
+                    connectionId: activeConnectionId,
+                  });
+                  if (getImgRes.success && getImgRes.image_content_b64) {
+                    const rawB64 = getImgRes.image_content_b64.trim();
+                    const mime = getImgRes.mime_type || targetImage.mime_type || 'image/jpeg';
+                    dataUrl = rawB64.startsWith('data:') ? rawB64 : `data:${mime};base64,${rawB64}`;
+                    this.sessionImageDataUrlCache.set(targetImage.drive_file_id, dataUrl);
+                  }
+                } catch (imgErr) {
+                  console.warn(
+                    '[SessionImage] 画像データ取得で例外が発生しました (drive_file_id:',
+                    targetImage.drive_file_id,
+                    '):',
+                    imgErr
+                  );
+                }
+              }
+
+              if (dataUrl) {
+                pMsg.imageUrl = dataUrl;
+                // records側の該当レコードにも反映
+                const rec = records.find((r) => r.event_id === pMsg.id);
+                if (rec) {
+                  rec.image_url = dataUrl;
+                }
+                matchedImagesCount++;
+              }
+            }
+          }
+        }
+      } catch (imgListErr) {
+        console.warn(
+          '[SessionImage] Session Image一覧取得で例外が発生しました (テキスト履歴は継続):',
+          imgListErr
+        );
+      }
+
       // 開発用診断ログ出力
       const renderableCount = messages.filter(
         (m) => (typeof m.content === 'string' && m.content.trim().length > 0) || !!m.imageUrl
@@ -795,6 +910,8 @@ export class RenderBackendChatAdapter implements ChatService {
         fallbackContentCount,
         normalizedMessagesTotal: messages.length,
         renderableMessagesTotal: renderableCount,
+        sessionImagesTotal,
+        matchedImagesCount,
         sampleRoles,
         firstRecordKeys: sampleItem,
         firstRecordOriginalMessageKeys: sampleOriginalKeys,

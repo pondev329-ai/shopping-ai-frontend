@@ -123,8 +123,27 @@ export const ConversationReviewModal: React.FC<ConversationReviewModalProps> = (
           : [];
 
         if (res.success && renderableMessages.length > 0) {
+          // Drive側でimageUrlが未設定の写真メッセージがある場合、
+          // 同じセッションのlocalConversationRecordにimageUrlが存在すれば補完（多層防御）
+          const enrichedMessages = renderableMessages.map((m) => {
+            if (m.imageUrl) return m;
+            const isPhotoTurn =
+              m.role === 'user' &&
+              ((m.content || '').trim() === '写真' ||
+                (m.content || '').includes('スーパーで見つけた商品・食材の写真'));
+            if (isPhotoTurn) {
+              const localMatch = localConversationRecord.find(
+                (loc) => loc.id === m.id || (loc.role === 'user' && loc.imageUrl)
+              );
+              if (localMatch?.imageUrl) {
+                return { ...m, imageUrl: localMatch.imageUrl };
+              }
+            }
+            return m;
+          });
+
           // 正常で表示可能なDrive履歴が取得できた場合のみDriveへ切り替え
-          setTimelineMessages(renderableMessages);
+          setTimelineMessages(enrichedMessages);
           setSourceType('drive');
           setDriveError(null);
         } else {
@@ -176,7 +195,24 @@ export const ConversationReviewModal: React.FC<ConversationReviewModalProps> = (
         : [];
 
       if (res.success && renderableMessages.length > 0) {
-        setTimelineMessages(renderableMessages);
+        const enrichedMessages = renderableMessages.map((m) => {
+          if (m.imageUrl) return m;
+          const isPhotoTurn =
+            m.role === 'user' &&
+            ((m.content || '').trim() === '写真' ||
+              (m.content || '').includes('スーパーで見つけた商品・食材の写真'));
+          if (isPhotoTurn) {
+            const localMatch = localConversationRecord.find(
+              (loc) => loc.id === m.id || (loc.role === 'user' && loc.imageUrl)
+            );
+            if (localMatch?.imageUrl) {
+              return { ...m, imageUrl: localMatch.imageUrl };
+            }
+          }
+          return m;
+        });
+
+        setTimelineMessages(enrichedMessages);
         setSourceType('drive');
       } else {
         // 表示不能または0件の場合はローカル履歴を維持
