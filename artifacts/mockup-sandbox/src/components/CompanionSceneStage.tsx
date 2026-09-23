@@ -415,8 +415,8 @@ export const CompanionSceneStage: React.FC<CompanionSceneStageProps> = ({
           </div>
         )}
 
-        {/* ポコ太 SVGキャラクター（画面サイズで変動せず「大」サイズで固定表示） */}
-        <div className="relative w-[172px] h-[236px] shrink-0 drop-shadow-md transition-transform hover:scale-[1.01]">
+        {/* ポコ太 SVGキャラクター（存在感を保ちつつ、左上履歴ボタン枠のすぐ下に耳が収まる微調整サイズ） */}
+        <div className="relative w-[154px] h-[212px] sm:w-[162px] sm:h-[224px] shrink-0 drop-shadow-md transition-transform hover:scale-[1.01]">
           <svg
             viewBox="0 0 160 220"
             className="w-full h-full"
