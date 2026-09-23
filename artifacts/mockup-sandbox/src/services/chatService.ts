@@ -619,20 +619,62 @@ export class RenderBackendChatAdapter implements ChatService {
           continue;
         }
 
-        // roleの正規化: user, assistant, system
-        const rawRole = String(raw.role || raw.speaker || raw.author || raw.sender || 'assistant').toLowerCase();
-        const role = rawRole.includes('user') ? 'user' : rawRole.includes('system') ? 'system' : 'assistant';
+        // original_message の抽出（オブジェクトまたはJSON文字列）
+        let originalMsg: Record<string, unknown> | null = null;
+        if (raw.original_message && typeof raw.original_message === 'object') {
+          originalMsg = raw.original_message as Record<string, unknown>;
+        } else if (typeof raw.original_message === 'string' && raw.original_message.trim().startsWith('{')) {
+          try {
+            const parsed = JSON.parse(raw.original_message);
+            if (parsed && typeof parsed === 'object') {
+              originalMsg = parsed as Record<string, unknown>;
+            }
+          } catch {
+            // ignore
+          }
+        }
 
-        // contentの抽出
+        // roleの正規化: original_message.role を最優先、フォールバックとして raw.role / speaker / author / sender
+        const candidateRole =
+          originalMsg?.role ??
+          originalMsg?.speaker ??
+          originalMsg?.sender ??
+          raw.role ??
+          raw.speaker ??
+          raw.author ??
+          raw.sender ??
+          'assistant';
+        const rawRole = String(candidateRole).toLowerCase();
+        const role: 'user' | 'assistant' | 'system' = rawRole.includes('user')
+          ? 'user'
+          : rawRole.includes('system')
+          ? 'system'
+          : 'assistant';
+
+        // contentの抽出: original_message.content を最優先、フォールバックとして raw.content / raw.message / raw.text
         let content = '';
-        if (typeof raw.content === 'string') {
-          content = raw.content;
-        } else if (typeof raw.message === 'string') {
-          content = raw.message;
-        } else if (typeof raw.text === 'string') {
-          content = raw.text;
-        } else if (raw.content && typeof raw.content === 'object') {
-          content = JSON.stringify(raw.content);
+        if (originalMsg) {
+          if (typeof originalMsg.content === 'string') {
+            content = originalMsg.content;
+          } else if (typeof originalMsg.message === 'string') {
+            content = originalMsg.message;
+          } else if (typeof originalMsg.text === 'string') {
+            content = originalMsg.text;
+          } else if (originalMsg.content && typeof originalMsg.content === 'object') {
+            content = JSON.stringify(originalMsg.content);
+          }
+        }
+
+        if (!content) {
+          if (typeof raw.content === 'string') {
+            content = raw.content;
+          } else if (typeof raw.message === 'string') {
+            content = raw.message;
+          } else if (typeof raw.text === 'string') {
+            content = raw.text;
+          } else if (raw.content && typeof raw.content === 'object') {
+            content = JSON.stringify(raw.content);
+          }
         }
 
         // event_idの抽出
@@ -640,7 +682,14 @@ export class RenderBackendChatAdapter implements ChatService {
 
         // occurred_at / timestampのパース
         let timestamp = Date.now();
-        const rawOccurred = raw.occurred_at || raw.occurredAt || raw.timestamp || raw.created_at || raw.createdAt;
+        const rawOccurred =
+          raw.occurred_at ||
+          raw.occurredAt ||
+          originalMsg?.occurred_at ||
+          originalMsg?.timestamp ||
+          raw.timestamp ||
+          raw.created_at ||
+          raw.createdAt;
         if (typeof rawOccurred === 'number') {
           timestamp = rawOccurred > 1e12 ? rawOccurred : rawOccurred * 1000;
         } else if (typeof rawOccurred === 'string' && rawOccurred.trim()) {
@@ -650,7 +699,17 @@ export class RenderBackendChatAdapter implements ChatService {
           }
         }
 
-        const imageUrl = typeof raw.image_url === 'string' ? raw.image_url : typeof raw.imageUrl === 'string' ? raw.imageUrl : undefined;
+        // image_urlの抽出（raw または original_message）
+        const imageUrl =
+          typeof raw.image_url === 'string'
+            ? raw.image_url
+            : typeof raw.imageUrl === 'string'
+            ? raw.imageUrl
+            : typeof originalMsg?.image_url === 'string'
+            ? (originalMsg.image_url as string)
+            : typeof originalMsg?.imageUrl === 'string'
+            ? (originalMsg.imageUrl as string)
+            : undefined;
 
         const timelineRecord: MemoryTimelineRecord = {
           event_id: eventId,
