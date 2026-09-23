@@ -668,6 +668,22 @@ export const ShoppingAIChat: React.FC<ShoppingAIChatProps> = ({
   const pastMessageCount = conversationRecord.length - recentDisplayMessages.length;
   const latestAssistantMsg = [...conversationRecord].reverse().find((m) => m.role === 'assistant');
 
+  // 会話欄フォントサイズの基準定義（標準と大の差を明確化し、上部シーン文字との調和を保つ）
+  const getMessageFontSizeClass = (size: typeof fontSize) => {
+    switch (size) {
+      case 'small':
+        return 'text-[13.5px] leading-relaxed';
+      case 'standard':
+        return 'text-[15px] leading-relaxed'; // 標準：すっきりと整った日常使いサイズ
+      case 'large':
+        return 'text-[17.5px] leading-[1.7]'; // 大：見た目に違いがハッキリわかり、上部シーン文字（15〜16px）と調和する基準
+      case 'extra_large':
+        return 'text-[19.5px] leading-[1.7]';
+      default:
+        return 'text-[15px] leading-relaxed';
+    }
+  };
+
   return (
     <div
       id="shopping-ai-root"
@@ -757,11 +773,11 @@ export const ShoppingAIChat: React.FC<ShoppingAIChatProps> = ({
         </div>
       </header>
 
-      {/* 2. メイン画面の横長シーン領域（回答・会話領域と1:1の比率でゆったり配置） */}
+      {/* 2. メイン画面の横長シーン領域（背景＋ポコ太のサイズ感を基準として固定） */}
       <section
         id="stage-scene-main"
         aria-label="現在のシーンとキャラクター"
-        className="flex-1 min-h-0 p-2 sm:p-2.5 bg-stone-100/90 dark:bg-stone-900/90 border-b border-stone-200 dark:border-stone-800 transition-colors flex flex-col"
+        className="h-[270px] sm:h-[285px] shrink-0 p-2 sm:p-2.5 bg-stone-100/90 dark:bg-stone-900/90 border-b border-stone-200 dark:border-stone-800 transition-colors flex flex-col"
       >
         <CompanionSceneStage
           scene={activeSession.currentScene || 'planning'}
@@ -772,7 +788,7 @@ export const ShoppingAIChat: React.FC<ShoppingAIChatProps> = ({
         />
       </section>
 
-      {/* 3. Shopping AIの返信 & 対話領域（シーン領域と1:1の比率） */}
+      {/* 3. Shopping AIの返信 & 対話領域 */}
       <section
         id="stage-lower-dialogue"
         aria-label="Shopping AIの返信と対話"
@@ -794,10 +810,10 @@ export const ShoppingAIChat: React.FC<ShoppingAIChatProps> = ({
               {msg.role === 'assistant' && (
                 <div className="flex items-center gap-1.5 mb-1 pl-1">
                   <div className="w-5 h-5 rounded-full bg-emerald-600 text-white flex items-center justify-center text-[10px] font-bold shadow-2xs shrink-0">
-                    ボ
+                    ポ
                   </div>
                   <span className="text-xs font-bold text-stone-800 dark:text-stone-200">
-                    ボコ太
+                    ポコ太
                   </span>
                   {activeSession.expertMode && (
                     <span className="text-[10px] bg-purple-100 dark:bg-purple-950/80 text-purple-800 dark:text-purple-300 px-1.5 py-0.2 rounded font-semibold border border-purple-200 dark:border-purple-800">
@@ -809,7 +825,9 @@ export const ShoppingAIChat: React.FC<ShoppingAIChatProps> = ({
 
               {/* Balloon: スマホでは横幅いっぱいにフィット (w-full max-w-full) */}
               <div
-                className={`relative w-full sm:max-w-[92%] rounded-2xl px-3.5 sm:px-4 py-3 text-[14.5px] leading-relaxed break-words whitespace-pre-wrap transition-colors ${
+                className={`relative w-full sm:max-w-[92%] rounded-2xl px-3.5 sm:px-4 py-3 ${getMessageFontSizeClass(
+                  fontSize
+                )} break-words whitespace-pre-wrap transition-all ${
                   msg.role === 'user'
                     ? 'bg-emerald-600 text-white rounded-tr-xs shadow-xs font-normal'
                     : 'bg-white dark:bg-stone-800 text-stone-800 dark:text-stone-100 border border-stone-200 dark:border-stone-700 rounded-tl-xs shadow-2xs group'
@@ -882,13 +900,17 @@ export const ShoppingAIChat: React.FC<ShoppingAIChatProps> = ({
                             className="w-full text-left bg-white dark:bg-stone-800 hover:bg-stone-50 dark:hover:bg-stone-750 active:bg-stone-100 dark:active:bg-stone-700 border border-stone-200 dark:border-stone-700 hover:border-emerald-500 dark:hover:border-emerald-500 rounded-xl p-3 transition-all shadow-2xs group cursor-pointer"
                           >
                             <div className="flex items-start justify-between gap-2">
-                              <h2 className="font-semibold text-stone-900 dark:text-stone-100 text-xs group-hover:text-emerald-700 dark:group-hover:text-emerald-400 transition-colors">
+                              <h2 className={`font-semibold text-stone-900 dark:text-stone-100 ${
+                                fontSize === 'large' || fontSize === 'extra_large' ? 'text-[13.5px]' : 'text-xs'
+                              } group-hover:text-emerald-700 dark:group-hover:text-emerald-400 transition-colors`}>
                                 {opt.title}
                               </h2>
                               <ChevronRight className="w-3.5 h-3.5 text-stone-400 dark:text-stone-500 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors shrink-0 mt-0.5" />
                             </div>
                             {opt.summary && (
-                              <p className="text-xs text-stone-600 dark:text-stone-300 mt-0.5 leading-relaxed">{opt.summary}</p>
+                              <p className={`${
+                                fontSize === 'large' || fontSize === 'extra_large' ? 'text-[13px]' : 'text-xs'
+                              } text-stone-600 dark:text-stone-300 mt-0.5 leading-relaxed`}>{opt.summary}</p>
                             )}
 
                             <div className="flex flex-wrap items-center gap-2 mt-2 pt-1.5 border-t border-stone-100 dark:border-stone-700/60 text-[11px] text-stone-500 dark:text-stone-400">
@@ -981,7 +1003,9 @@ export const ShoppingAIChat: React.FC<ShoppingAIChatProps> = ({
                       key={i}
                       id={`btn-quick-reply-${i}`}
                       onClick={() => handleSend(reply)}
-                      className="text-xs bg-white dark:bg-stone-800 active:bg-stone-100 dark:active:bg-stone-700 text-stone-700 dark:text-stone-200 border border-stone-300 dark:border-stone-600 hover:border-emerald-600 dark:hover:border-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300 px-3 py-1.5 rounded-full transition-colors shadow-2xs cursor-pointer font-normal"
+                      className={`${
+                        fontSize === 'large' || fontSize === 'extra_large' ? 'text-[13px]' : 'text-xs'
+                      } bg-white dark:bg-stone-800 active:bg-stone-100 dark:active:bg-stone-700 text-stone-700 dark:text-stone-200 border border-stone-300 dark:border-stone-600 hover:border-emerald-600 dark:hover:border-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300 px-3 py-1.5 rounded-full transition-colors shadow-2xs cursor-pointer font-normal`}
                     >
                       {reply}
                     </button>

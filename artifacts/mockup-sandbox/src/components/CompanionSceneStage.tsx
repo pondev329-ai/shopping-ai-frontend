@@ -383,14 +383,14 @@ export const CompanionSceneStage: React.FC<CompanionSceneStageProps> = ({
       >
         {/* 考え中エフェクト（ポコ太の頭上にふわっと浮かぶ） */}
         {isTyping && (
-          <div className="mb-1 z-20 flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-white/95 dark:bg-stone-900/95 backdrop-blur-md shadow-md border border-emerald-400 dark:border-emerald-600 text-[10px] sm:text-xs font-bold text-emerald-800 dark:text-emerald-300 animate-bounce whitespace-nowrap">
-            <Sparkles className="w-3 h-3 text-emerald-600 dark:text-emerald-400 animate-spin" />
+          <div className="mb-1 z-20 flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/95 dark:bg-stone-900/95 backdrop-blur-md shadow-md border border-emerald-400 dark:border-emerald-600 text-xs font-bold text-emerald-800 dark:text-emerald-300 animate-bounce whitespace-nowrap">
+            <Sparkles className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 animate-spin" />
             <span>考え中...</span>
           </div>
         )}
 
-        {/* ポコ太 SVGキャラクター（シーン左側で主役として十分認識できる大きさ） */}
-        <div className="relative w-36 h-48 sm:w-44 sm:h-58 md:w-50 md:h-66 drop-shadow-md transition-transform hover:scale-[1.02]">
+        {/* ポコ太 SVGキャラクター（画面サイズで変動せず「大」サイズで固定表示） */}
+        <div className="relative w-[172px] h-[236px] shrink-0 drop-shadow-md transition-transform hover:scale-[1.01]">
           <svg
             viewBox="0 0 160 220"
             className="w-full h-full"
@@ -526,10 +526,10 @@ export const CompanionSceneStage: React.FC<CompanionSceneStageProps> = ({
         </div>
 
         {/* ポコ太のネームタグ */}
-        <div className="-mt-1 mb-1 px-2.5 py-0.5 rounded-full bg-white/95 dark:bg-stone-900/95 backdrop-blur-xs border border-stone-200/90 dark:border-stone-700 shadow-2xs text-[11px] font-bold text-stone-800 dark:text-stone-100 flex items-center gap-1">
+        <div className="-mt-1 mb-1 px-3 py-0.5 rounded-full bg-white/95 dark:bg-stone-900/95 backdrop-blur-xs border border-stone-200/90 dark:border-stone-700 shadow-2xs text-xs sm:text-[13px] font-bold text-stone-800 dark:text-stone-100 flex items-center gap-1.5">
           <span>ポコ太</span>
           {expertMeta && (
-            <span className="text-[9.5px] text-emerald-700 dark:text-emerald-400 font-semibold">
+            <span className="text-[10px] text-emerald-700 dark:text-emerald-400 font-semibold">
               · {expertMeta.label}
             </span>
           )}
@@ -537,7 +537,7 @@ export const CompanionSceneStage: React.FC<CompanionSceneStageProps> = ({
       </div>
 
       {/* ============================================================ */}
-      {/* 3. 右側：Statusカード（半透明ですりガラス・背景がしっかり透けて見える） */}
+      {/* 3. 右側：Statusカード（上部シーン文字は「大」を基準にし、読みやすい大きさ） */}
       {/* ============================================================ */}
       <div
         id="scene-stage-status-card"
@@ -551,33 +551,33 @@ export const CompanionSceneStage: React.FC<CompanionSceneStageProps> = ({
           }
         }}
         title="タップして詳しいステータス・認識詳細を確認"
-        className="absolute top-2.5 right-2.5 sm:top-3 sm:right-3 bottom-2.5 sm:bottom-3 z-20 w-[170px] sm:w-[200px] md:w-[225px] bg-white/45 dark:bg-stone-950/45 hover:bg-white/55 dark:hover:bg-stone-950/55 backdrop-blur-md rounded-xl sm:rounded-2xl border border-white/60 dark:border-white/15 shadow-sm p-2.5 sm:p-3 flex flex-col justify-between cursor-pointer transition-all active:scale-[0.99] group text-left"
+        className="absolute top-2.5 right-2.5 sm:top-3 sm:right-3 bottom-2.5 sm:bottom-3 z-20 w-[185px] sm:w-[215px] md:w-[235px] bg-white/45 dark:bg-stone-950/45 hover:bg-white/55 dark:hover:bg-stone-950/55 backdrop-blur-md rounded-xl sm:rounded-2xl border border-white/60 dark:border-white/15 shadow-sm p-2.5 sm:p-3 flex flex-col justify-between cursor-pointer transition-all active:scale-[0.99] group text-left"
       >
-        {/* カード最上部：現在のシーン表示 */}
+        {/* カード最上部：現在のシーン表示（「大」基準でハッキリ視認） */}
         <div className="flex items-center justify-between border-b border-stone-800/10 dark:border-white/10 pb-1.5 shrink-0">
           <div className="flex items-center gap-1.5 min-w-0">
-            <span className="text-xs sm:text-sm font-bold text-stone-950 dark:text-white truncate drop-shadow-[0_1px_1px_rgba(255,255,255,0.8)] dark:drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]">
+            <span className="text-[14.5px] sm:text-base font-bold text-stone-950 dark:text-white truncate drop-shadow-[0_1px_1px_rgba(255,255,255,0.8)] dark:drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]">
               {sceneHeader.title}
             </span>
           </div>
-          <span className="w-4 h-4 rounded-full bg-white/60 dark:bg-stone-800/60 group-hover:bg-emerald-100 dark:group-hover:bg-emerald-950 flex items-center justify-center transition-colors shrink-0 shadow-2xs">
-            <ChevronRight className="w-3 h-3 text-stone-600 dark:text-stone-300 group-hover:text-emerald-700 dark:group-hover:text-emerald-300 transition-colors" />
+          <span className="w-5 h-5 rounded-full bg-white/70 dark:bg-stone-800/70 group-hover:bg-emerald-100 dark:group-hover:bg-emerald-950 flex items-center justify-center transition-colors shrink-0 shadow-2xs">
+            <ChevronRight className="w-3.5 h-3.5 text-stone-600 dark:text-stone-300 group-hover:text-emerald-700 dark:group-hover:text-emerald-300 transition-colors" />
           </span>
         </div>
 
-        {/* カード中央〜下部：現在の状態（半透明ピルで背景を透かしつつ文字をクリアに表示） */}
+        {/* カード中央〜下部：現在の状態（候補・状態テキストも「大」基準で読みやすく表示） */}
         <div className="flex-1 flex flex-col justify-center gap-1.5 py-1 min-h-0 overflow-hidden">
           {displayStatusLines.map((item, idx) => (
             <div
               key={idx}
-              className="flex items-center gap-1.5 text-xs text-stone-900 dark:text-stone-100 min-w-0 bg-white/40 dark:bg-black/35 backdrop-blur-xs rounded-lg px-2 py-1 border border-white/40 dark:border-white/5 shadow-2xs"
+              className="flex items-center gap-2 text-stone-900 dark:text-stone-100 min-w-0 bg-white/45 dark:bg-black/35 backdrop-blur-xs rounded-lg px-2.5 py-1 border border-white/40 dark:border-white/5 shadow-2xs"
             >
-              <span className="text-sm shrink-0 leading-none">{item.icon}</span>
-              <span className="truncate text-[11.5px] sm:text-xs font-semibold leading-tight text-stone-900 dark:text-stone-100 drop-shadow-[0_0.5px_0.5px_rgba(255,255,255,0.7)] dark:drop-shadow-[0_1px_1px_rgba(0,0,0,0.8)]">
+              <span className="text-base shrink-0 leading-none">{item.icon}</span>
+              <span className="truncate text-[12.5px] sm:text-[13.5px] font-semibold leading-tight text-stone-900 dark:text-stone-100 drop-shadow-[0_0.5px_0.5px_rgba(255,255,255,0.7)] dark:drop-shadow-[0_1px_1px_rgba(0,0,0,0.8)]">
                 {item.text}
               </span>
               {item.badge && (
-                <span className="shrink-0 text-[9px] px-1 py-0.2 rounded bg-emerald-600/90 text-white font-bold shadow-2xs">
+                <span className="shrink-0 text-[10px] px-1.5 py-0.5 rounded bg-emerald-600/90 text-white font-bold shadow-2xs">
                   {item.badge}
                 </span>
               )}
@@ -586,9 +586,9 @@ export const CompanionSceneStage: React.FC<CompanionSceneStageProps> = ({
         </div>
 
         {/* 最下部の控えめなヒント */}
-        <div className="pt-1 border-t border-stone-800/10 dark:border-white/10 flex items-center justify-between text-[10px] text-stone-700 dark:text-stone-300 font-medium shrink-0">
+        <div className="pt-1 border-t border-stone-800/10 dark:border-white/10 flex items-center justify-between text-[10.5px] sm:text-[11px] text-stone-700 dark:text-stone-300 font-medium shrink-0">
           <span className="drop-shadow-2xs">状況タップで詳細</span>
-          <span className="text-[9px] font-mono font-bold text-stone-800 dark:text-stone-200 opacity-80">STATUS</span>
+          <span className="text-[9.5px] font-mono font-bold text-stone-800 dark:text-stone-200 opacity-80">STATUS</span>
         </div>
       </div>
     </div>

@@ -22,11 +22,20 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   if (!isOpen) return null;
 
   const fontOptions: { id: FontSize; label: string; description: string; sample: string }[] = [
-    { id: 'small', label: '小', description: '情報量を多くコンパクトに表示', sample: 'text-xs' },
-    { id: 'standard', label: '標準', description: '読みやすくバランスのとれた標準サイズ', sample: 'text-sm' },
-    { id: 'large', label: '大', description: '大きめの文字で見やすく快適', sample: 'text-base' },
-    { id: 'extra_large', label: '特大', description: 'さらに大きく、遠くからでも見やすい', sample: 'text-lg font-medium' },
+    { id: 'small', label: '小', description: '情報量を多くコンパクトに表示 (13.5px)', sample: 'text-xs' },
+    { id: 'standard', label: '標準', description: 'すっきりと整った日常サイズ (15px)', sample: 'text-sm' },
+    { id: 'large', label: '大', description: '文字が大きくくっきりと見やすい (17.5px)', sample: 'text-base font-semibold' },
+    { id: 'extra_large', label: '特大', description: 'さらに大きく、遠くからでも見やすい (19.5px)', sample: 'text-lg font-bold' },
   ];
+
+  const previewClass =
+    fontSize === 'small'
+      ? 'text-[13.5px]'
+      : fontSize === 'standard'
+      ? 'text-[15px]'
+      : fontSize === 'large'
+      ? 'text-[17.5px] leading-[1.7]'
+      : 'text-[19.5px] leading-[1.7]';
 
   return (
     <div
@@ -171,7 +180,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               <span className="text-[10px] font-semibold text-stone-400 uppercase tracking-wider block">
                 表示サンプル
               </span>
-              <p className="text-stone-800 dark:text-stone-100 leading-relaxed">
+              <p className={`text-stone-800 dark:text-stone-100 ${previewClass} transition-all`}>
                 今夜は豚肉とキャベツで回鍋肉はいかがでしょうか？買い足し不要で作れます。
               </p>
             </div>
