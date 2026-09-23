@@ -607,6 +607,16 @@ export class RenderBackendChatAdapter implements ChatService {
       const records: MemoryTimelineRecord[] = [];
       const messages: ChatMessage[] = [];
 
+      // ログ集計用カウンター
+      let matchedSessionCount = 0;
+      let excludedSessionCount = 0;
+      let hasOriginalMessageCount = 0;
+      let hasOriginalRoleCount = 0;
+      let hasOriginalContentCount = 0;
+      let fallbackRoleCount = 0;
+      let fallbackContentCount = 0;
+      const sampleRoles: string[] = [];
+
       for (let i = 0; i < rawList.length; i++) {
         const item = rawList[i];
         if (!item || typeof item !== 'object') continue;
@@ -614,18 +624,21 @@ export class RenderBackendChatAdapter implements ChatService {
         const raw = item as Record<string, unknown>;
 
         // session_idの整合性確認（指定session_idと異なるレコードが混在している場合はスキップ）
-        const itemSessionId = raw.session_id || raw.sessionId;
+        const itemSessionId = raw.session_id ?? raw.sessionId;
         if (itemSessionId && String(itemSessionId) !== String(sessionId)) {
+          excludedSessionCount++;
           continue;
         }
+        matchedSessionCount++;
 
-        // original_message の抽出（オブジェクトまたはJSON文字列）
+        // original_message の抽出（オブジェクトまたはJSON文字列、スネークケース / キャメルケース）
+        const rawOriginal = raw.original_message ?? raw.originalMessage;
         let originalMsg: Record<string, unknown> | null = null;
-        if (raw.original_message && typeof raw.original_message === 'object') {
-          originalMsg = raw.original_message as Record<string, unknown>;
-        } else if (typeof raw.original_message === 'string' && raw.original_message.trim().startsWith('{')) {
+        if (rawOriginal && typeof rawOriginal === 'object') {
+          originalMsg = rawOriginal as Record<string, unknown>;
+        } else if (typeof rawOriginal === 'string' && rawOriginal.trim().startsWith('{')) {
           try {
-            const parsed = JSON.parse(raw.original_message);
+            const parsed = JSON.parse(rawOriginal);
             if (parsed && typeof parsed === 'object') {
               originalMsg = parsed as Record<string, unknown>;
             }
@@ -634,11 +647,20 @@ export class RenderBackendChatAdapter implements ChatService {
           }
         }
 
+        if (originalMsg) {
+          hasOriginalMessageCount++;
+        }
+
         // roleの正規化: original_message.role を最優先、フォールバックとして raw.role / speaker / author / sender
+        const origRole = originalMsg?.role ?? originalMsg?.speaker ?? originalMsg?.sender;
+        if (origRole) {
+          hasOriginalRoleCount++;
+        } else if (raw.role || raw.speaker || raw.author || raw.sender) {
+          fallbackRoleCount++;
+        }
+
         const candidateRole =
-          originalMsg?.role ??
-          originalMsg?.speaker ??
-          originalMsg?.sender ??
+          origRole ??
           raw.role ??
           raw.speaker ??
           raw.author ??
@@ -650,6 +672,10 @@ export class RenderBackendChatAdapter implements ChatService {
           : rawRole.includes('system')
           ? 'system'
           : 'assistant';
+
+        if (sampleRoles.length < 5) {
+          sampleRoles.push(`${role}(from:${origRole ? 'original' : 'raw'})`);
+        }
 
         // contentの抽出: original_message.content を最優先、フォールバックとして raw.content / raw.message / raw.text
         let content = '';
@@ -663,6 +689,9 @@ export class RenderBackendChatAdapter implements ChatService {
           } else if (originalMsg.content && typeof originalMsg.content === 'object') {
             content = JSON.stringify(originalMsg.content);
           }
+          if (content.trim()) {
+            hasOriginalContentCount++;
+          }
         }
 
         if (!content) {
@@ -674,6 +703,9 @@ export class RenderBackendChatAdapter implements ChatService {
             content = raw.text;
           } else if (raw.content && typeof raw.content === 'object') {
             content = JSON.stringify(raw.content);
+          }
+          if (content.trim()) {
+            fallbackContentCount++;
           }
         }
 
@@ -734,6 +766,39 @@ export class RenderBackendChatAdapter implements ChatService {
 
       // 時系列順（occurred_at / timestamp の昇順）でソートし、user -> assistant の対話順序を確実に保持
       messages.sort((a, b) => a.timestamp - b.timestamp);
+
+      // 開発用診断ログ出力
+      const renderableCount = messages.filter(
+        (m) => (typeof m.content === 'string' && m.content.trim().length > 0) || !!m.imageUrl
+      ).length;
+
+      // 構造チェック用のサンプルキー（最初の1件）
+      const sampleItem = rawList.length > 0 && typeof rawList[0] === 'object' && rawList[0] !== null
+        ? Object.keys(rawList[0] as Record<string, unknown>)
+        : [];
+      const sampleRawFirst = rawList.length > 0 && typeof rawList[0] === 'object' && rawList[0] !== null
+        ? (rawList[0] as Record<string, unknown>)
+        : null;
+      const sampleOriginalKeys = sampleRawFirst && sampleRawFirst.original_message && typeof sampleRawFirst.original_message === 'object'
+        ? Object.keys(sampleRawFirst.original_message as Record<string, unknown>)
+        : [];
+
+      console.log('[Google Drive Memory Timeline Diagnostics]', {
+        targetSessionId: sessionId,
+        rawRecordsTotal: rawList.length,
+        matchedSessionRecords: matchedSessionCount,
+        excludedSessionRecords: excludedSessionCount,
+        hasOriginalMessageCount,
+        hasOriginalRoleCount,
+        hasOriginalContentCount,
+        fallbackRoleCount,
+        fallbackContentCount,
+        normalizedMessagesTotal: messages.length,
+        renderableMessagesTotal: renderableCount,
+        sampleRoles,
+        firstRecordKeys: sampleItem,
+        firstRecordOriginalMessageKeys: sampleOriginalKeys,
+      });
 
       return {
         success: true,

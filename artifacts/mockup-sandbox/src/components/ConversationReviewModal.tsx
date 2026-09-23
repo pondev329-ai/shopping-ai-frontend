@@ -113,18 +113,23 @@ export const ConversationReviewModal: React.FC<ConversationReviewModalProps> = (
 
         if (!isMounted) return;
 
-        if (res.success && Array.isArray(res.messages) && res.messages.length > 0) {
-          // Drive側から有効なConversation Recordが取得できた場合
-          setTimelineMessages(res.messages);
+        // Drive同期の採用条件:
+        // 1. レスポンス成功かつ配列が存在
+        // 2. 最低限1件以上の表示可能な content または imageUrl を持つメッセージが存在する
+        const renderableMessages = Array.isArray(res.messages)
+          ? res.messages.filter(
+              (m) => (typeof m.content === 'string' && m.content.trim().length > 0) || !!m.imageUrl
+            )
+          : [];
+
+        if (res.success && renderableMessages.length > 0) {
+          // 正常で表示可能なDrive履歴が取得できた場合のみDriveへ切り替え
+          setTimelineMessages(renderableMessages);
           setSourceType('drive');
           setDriveError(null);
-        } else if (res.success && Array.isArray(res.messages) && res.messages.length === 0) {
-          // Drive上にまだレコードが作成されていない場合、ローカル履歴をフォールバック表示
-          setTimelineMessages(null);
-          setSourceType('local');
-          setDriveError(null);
         } else {
-          // エラーまたは未取得時はローカル履歴へフォールバック
+          // Drive上にレコードがまだない場合や、レコードがあっても表示可能なメッセージが0件の場合は、
+          // 正常なローカル履歴を上書きせずそのまま維持する
           setTimelineMessages(null);
           setSourceType('local');
           if (res.error) {
@@ -163,10 +168,18 @@ export const ConversationReviewModal: React.FC<ConversationReviewModalProps> = (
         sessionId,
         validMemoryConnectionId
       );
-      if (res.success && Array.isArray(res.messages) && res.messages.length > 0) {
-        setTimelineMessages(res.messages);
+
+      const renderableMessages = Array.isArray(res.messages)
+        ? res.messages.filter(
+            (m) => (typeof m.content === 'string' && m.content.trim().length > 0) || !!m.imageUrl
+          )
+        : [];
+
+      if (res.success && renderableMessages.length > 0) {
+        setTimelineMessages(renderableMessages);
         setSourceType('drive');
       } else {
+        // 表示不能または0件の場合はローカル履歴を維持
         setTimelineMessages(null);
         setSourceType('local');
         if (res.error) {
@@ -186,7 +199,11 @@ export const ConversationReviewModal: React.FC<ConversationReviewModalProps> = (
   if (!isOpen) return null;
 
   // 表示するメッセージ配列（Drive取得成功時はDriveのConversation Record、それ以外はローカル履歴）
-  const activeRecord = timelineMessages !== null ? timelineMessages : localConversationRecord;
+  // 中身のない空メッセージで枠だけが表示されるのを防ぐため、表示可能なメッセージのみを対象とする
+  const baseRecord = timelineMessages !== null ? timelineMessages : localConversationRecord;
+  const activeRecord = baseRecord.filter(
+    (msg) => (typeof msg.content === 'string' && msg.content.trim().length > 0) || !!msg.imageUrl
+  );
 
   const filteredMessages = activeRecord.filter((msg) => {
     if (!searchQuery.trim()) return true;
