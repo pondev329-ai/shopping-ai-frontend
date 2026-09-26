@@ -69,54 +69,42 @@ export function createNewSession(customTitle?: string): ShoppingSession {
  */
 export function extractStatusSummary(
   backendState: Record<string, unknown> | null,
-  latestResponse?: ChatResponse
+  latestResponse?: ChatResponse,
+  existingSummary?: SessionStatusSummary
 ): SessionStatusSummary {
   const summary: SessionStatusSummary = {
-    situation: [],
-    candidates: [],
-    possibilities: [],
-    decided: [],
-    undecided: [],
+    situation: existingSummary?.situation ? [...existingSummary.situation] : [],
+    candidates: existingSummary?.candidates ? [...existingSummary.candidates] : [],
+    possibilities: existingSummary?.possibilities ? [...existingSummary.possibilities] : [],
+    decided: existingSummary?.decided ? [...existingSummary.decided] : [],
+    undecided: existingSummary?.undecided ? [...existingSummary.undecided] : [],
+    shoppingProgress: existingSummary?.shoppingProgress,
   };
 
-  if (!backendState) {
-    if (latestResponse?.decisionData) {
-      if (latestResponse.decisionData.contextSummary?.moodOrPreference) {
-        summary.situation.push(latestResponse.decisionData.contextSummary.moodOrPreference);
-      }
-      if (latestResponse.decisionData.options) {
-        summary.candidates = latestResponse.decisionData.options.map((o) => ({
-          id: o.id,
-          title: o.title,
-          summary: o.summary,
-          reasons: o.reasons,
-          prepTimeMinutes: o.prepTimeMinutes,
-          requiresShopping: o.requiresShopping,
-        }));
-      }
-    }
-    if (summary.situation.length === 0) summary.situation.push('条件ヒアリング中');
-    if (summary.undecided.length === 0) summary.undecided.push('献立または買い物の方向性');
-    return summary;
-  }
-
   // 1. 今日の状況 (session_context)
-  const sessionCtx = backendState.session_context as {
+  const sessionCtx = (backendState?.session_context as {
     priorities?: string[];
     shopping_or_home?: string;
     decided?: string[];
     undecided?: string[];
-  } | undefined;
+  } | undefined) || (latestResponse?.rawBackendState?.session_context as any);
 
-  if (sessionCtx?.priorities && Array.isArray(sessionCtx.priorities) && sessionCtx.priorities.length > 0) {
-    summary.situation.push(...sessionCtx.priorities);
+  if (sessionCtx?.priorities && Array.isArray(sessionCtx.priorities)) {
+    sessionCtx.priorities.forEach((p) => {
+      if (p && !summary.situation.includes(p)) summary.situation.push(p);
+    });
+  }
+  if (latestResponse?.decisionData?.contextSummary?.moodOrPreference) {
+    const pref = latestResponse.decisionData.contextSummary.moodOrPreference;
+    if (pref && !summary.situation.includes(pref)) summary.situation.push(pref);
   }
   if (sessionCtx?.shopping_or_home && sessionCtx.shopping_or_home !== 'unknown') {
-    summary.situation.push(sessionCtx.shopping_or_home === 'shopping' ? 'スーパーで買い物中' : '自宅で調理検討中');
+    const label = sessionCtx.shopping_or_home === 'shopping' ? 'スーパーで買い物中' : '自宅で調理検討中';
+    if (!summary.situation.includes(label)) summary.situation.push(label);
   }
 
   // 2. 現在の候補 (possibility_context.meal_options)
-  const possibilityCtx = backendState.possibility_context as {
+  const possibilityCtx = (backendState?.possibility_context as {
     meal_options?: Array<{
       id?: string;
       title?: string;
@@ -132,20 +120,62 @@ export function extractStatusSummary(
     ingredients?: Array<{ name?: string; label?: string } | string>;
     recipe_catalog?: Array<{ title?: string; name?: string }>;
     offers?: Array<{ title?: string; name?: string; price?: number }>;
-  } | undefined;
+  } | undefined) || (latestResponse?.rawBackendState?.possibility_context as any);
 
   if (possibilityCtx?.meal_options && Array.isArray(possibilityCtx.meal_options)) {
-    summary.candidates = possibilityCtx.meal_options.map((opt, i) => ({
-      id: opt.id || `candidate-${i}`,
-      title: opt.title || opt.name || `候補 ${i + 1}`,
-      summary: opt.summary || opt.description,
-      reasons: opt.reasons,
-      prepTimeMinutes: opt.prep_time_minutes ?? opt.prepTimeMinutes,
-      requiresShopping: opt.requires_shopping ?? opt.requiresShopping,
-    }));
+    possibilityCtx.meal_options.forEach((opt, i) => {
+      const title = (opt.title || opt.name || `候補 ${i + 1}`).trim();
+      const id = opt.id || `candidate-${i}`;
+      const existingIdx = summary.candidates.findIndex(
+        (c) => c.id === id || c.title.toLowerCase() === title.toLowerCase()
+      );
+      if (existingIdx >= 0) {
+        summary.candidates[existingIdx] = {
+          ...summary.candidates[existingIdx],
+          summary: summary.candidates[existingIdx].summary || opt.summary || opt.description,
+          reasons: summary.candidates[existingIdx].reasons || opt.reasons,
+          prepTimeMinutes: summary.candidates[existingIdx].prepTimeMinutes ?? opt.prep_time_minutes ?? opt.prepTimeMinutes,
+          requiresShopping: summary.candidates[existingIdx].requiresShopping ?? opt.requires_shopping ?? opt.requiresShopping,
+        };
+      } else {
+        summary.candidates.push({
+          id,
+          title,
+          summary: opt.summary || opt.description,
+          reasons: opt.reasons,
+          prepTimeMinutes: opt.prep_time_minutes ?? opt.prepTimeMinutes,
+          requiresShopping: opt.requires_shopping ?? opt.requiresShopping,
+        });
+      }
+    });
   }
 
   // 2-B. Main Flowの routes[].candidates[] （店頭で見つけた食材・候補）を抽出して統合
+  function collectRouteObjects(source: unknown): Record<string, unknown>[] {
+    if (!source) return [];
+    if (Array.isArray(source)) {
+      const res: Record<string, unknown>[] = [];
+      source.forEach((item) => {
+        res.push(...collectRouteObjects(item));
+      });
+      return res;
+    }
+    if (typeof source === 'object' && source !== null) {
+      const obj = source as Record<string, unknown>;
+      if (Array.isArray(obj.routes)) {
+        return collectRouteObjects(obj.routes);
+      }
+      if (obj.candidates || obj.candidate || obj.items || obj.products || obj.ingredients) {
+        return [obj];
+      }
+      const vals = Object.values(obj);
+      if (vals.length > 0 && typeof vals[0] === 'object') {
+        return collectRouteObjects(vals);
+      }
+    }
+    return [];
+  }
+
   const rawRouteSources: unknown[] = [
     (backendState as any)?.routes,
     (backendState as any)?.shopping_context?.routes,
@@ -162,28 +192,23 @@ export function extractStatusSummary(
 
   rawRouteSources.forEach((source) => {
     if (!source) return;
-    const routesList: unknown[] = Array.isArray(source)
-      ? source
-      : typeof source === 'object'
-      ? Object.values(source)
-      : [];
+    const routesList = collectRouteObjects(source);
 
-    routesList.forEach((routeItem, rIdx) => {
-      if (!routeItem || typeof routeItem !== 'object') return;
-      const r = routeItem as Record<string, unknown>;
-      const routeTitle = String(r.name || r.title || r.section || '').trim();
-      const rawCands = Array.isArray(r.candidates)
-        ? r.candidates
-        : Array.isArray(r.items)
-        ? r.items
-        : Array.isArray(r.products)
-        ? r.products
-        : [];
+    routesList.forEach((r, rIdx) => {
+      const routeTitle = String(r.name || r.title || r.section || r.label || '').trim();
+      let rawCands: unknown[] = [];
+      if (Array.isArray(r.candidates)) rawCands = r.candidates;
+      else if (typeof r.candidates === 'string' && r.candidates.trim()) rawCands = [r.candidates.trim()];
+      else if (r.candidates && typeof r.candidates === 'object') rawCands = Object.values(r.candidates);
+      else if (r.candidate) rawCands = [r.candidate];
+      else if (Array.isArray(r.items)) rawCands = r.items;
+      else if (Array.isArray(r.products)) rawCands = r.products;
+      else if (Array.isArray(r.ingredients)) rawCands = r.ingredients;
 
       rawCands.forEach((cand, cIdx) => {
         if (!cand) return;
         let id: string;
-        let title: string;
+        let title: string = '';
         let summaryText: string | undefined;
         let reasons: string[] | undefined;
         let prepTimeMinutes: number | undefined;
@@ -197,8 +222,31 @@ export function extractStatusSummary(
           reasons = ['店頭での発見・候補食材'];
         } else if (typeof cand === 'object' && cand !== null) {
           const c = cand as Record<string, unknown>;
-          const rawTitle = c.title || c.name || c.item || c.ingredient || c.product || c.candidate || c.label || c.text;
-          title = typeof rawTitle === 'string' ? rawTitle.trim() : '';
+          const rawTitle =
+            c.title ||
+            c.name ||
+            c.item ||
+            c.ingredient ||
+            c.product ||
+            c.candidate ||
+            c.candidate_name ||
+            c.food ||
+            c.food_name ||
+            c.ingredient_name ||
+            c.product_name ||
+            c.item_name ||
+            c.label ||
+            c.display_name ||
+            c.text ||
+            c.value;
+          if (typeof rawTitle === 'string' && rawTitle.trim()) {
+            title = rawTitle.trim();
+          } else {
+            const keys = Object.keys(c);
+            if (keys.length === 1 && typeof keys[0] === 'string' && keys[0].trim() && isNaN(Number(keys[0]))) {
+              title = keys[0].trim();
+            }
+          }
           if (!title) return;
           id = typeof c.id === 'string' && c.id.trim() ? c.id.trim() : `route-cand-${rIdx}-${cIdx}-${title}`;
           summaryText =
@@ -276,7 +324,7 @@ export function extractStatusSummary(
   }
 
   // 3. 現在の可能性 (shopping_context.inventory + ingredients + flyer + 店頭発見食材)
-  const shoppingCtx = backendState.shopping_context as {
+  const shoppingCtx = (backendState?.shopping_context as {
     inventory?: string[];
     selected_product_ids?: string[];
     progress?: {
@@ -284,7 +332,7 @@ export function extractStatusSummary(
       collected?: number;
       step?: string;
     };
-  } | undefined;
+  } | undefined) || (latestResponse?.rawBackendState?.shopping_context as any);
 
   if (shoppingCtx?.inventory && shoppingCtx.inventory.length > 0) {
     summary.possibilities.push(`手持ち食材: ${shoppingCtx.inventory.join(', ')}`);

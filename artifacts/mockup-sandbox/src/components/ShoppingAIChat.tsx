@@ -188,7 +188,8 @@ export const ShoppingAIChat: React.FC<ShoppingAIChatProps> = ({
           if (chatService.setBackendState) {
             chatService.setBackendState(res.state);
           }
-          const updatedSummary = extractStatusSummary(res.state);
+          const currentTarget = sessions.find((s) => s.id === activeSessionId);
+          const updatedSummary = extractStatusSummary(res.state, undefined, currentTarget?.statusSummary);
           setSessionStore((prev) => ({
             ...prev,
             sessions: prev.sessions.map((s) =>
@@ -293,7 +294,7 @@ export const ShoppingAIChat: React.FC<ShoppingAIChatProps> = ({
             chatService.setBackendState(res.state);
           }
           // セッション復元情報 (restoreState) とステータスサマリーを同期更新
-          const updatedSummary = extractStatusSummary(res.state);
+          const updatedSummary = extractStatusSummary(res.state, undefined, target.statusSummary);
           setSessionStore((prev) => ({
             ...prev,
             sessions: prev.sessions.map((s) =>
@@ -489,7 +490,7 @@ export const ShoppingAIChat: React.FC<ShoppingAIChatProps> = ({
 
       const updatedRecordWithAi = [...newRecord, aiMessage];
       const newRestoreState = (response.rawBackendState ?? activeSession.restoreState) as Record<string, unknown> | null;
-      const newStatusSummary = extractStatusSummary(newRestoreState, response);
+      const newStatusSummary = extractStatusSummary(newRestoreState, response, activeSession.statusSummary);
 
       // 自動タイトル推論（初回ターンで一般的なタイトルの場合、最初の話題に合わせてスマートに反映）
       let updatedTitle = activeSession.title;

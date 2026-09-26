@@ -1902,29 +1902,16 @@ export class RenderBackendChatAdapter implements ChatService {
     }
 
     // Main Flowから渡された routes (買い回りルート・候補: routes[].candidates[])
-    const rawRoutes =
-      (Array.isArray(data.result.routes) && data.result.routes.length > 0
-        ? data.result.routes
-        : undefined) ||
-      (Array.isArray(data.result.state?.routes) && data.result.state.routes.length > 0
-        ? data.result.state.routes
-        : undefined) ||
-      (Array.isArray(data.result.state?.shopping_context?.routes) && data.result.state.shopping_context.routes.length > 0
-        ? data.result.state.shopping_context.routes
-        : undefined) ||
-      (Array.isArray(data.result.state?.possibility_context?.routes) && data.result.state.possibility_context.routes.length > 0
-        ? data.result.state.possibility_context.routes
-        : undefined) ||
-      (Array.isArray(data.result.state?.session_context?.routes) && data.result.state.session_context.routes.length > 0
-        ? data.result.state.session_context.routes
-        : undefined);
+    const rawRoutes = this.extractAllRoutes(data);
 
     // 次回ターン用のBackend Stateを更新・永続化
-    if (data.result.state) {
-      const stateToPersist = { ...(data.result.state as Record<string, unknown>) };
-      if (rawRoutes && !stateToPersist.routes) {
-        stateToPersist.routes = rawRoutes;
-      }
+    const stateToPersist: Record<string, unknown> = data.result.state
+      ? { ...(data.result.state as Record<string, unknown>) }
+      : {};
+    if (rawRoutes && !stateToPersist.routes) {
+      stateToPersist.routes = rawRoutes;
+    }
+    if (Object.keys(stateToPersist).length > 0) {
       this.persistState(stateToPersist);
     }
 
@@ -1988,14 +1975,57 @@ export class RenderBackendChatAdapter implements ChatService {
       }
     }
 
+    const stateToReturn = Object.keys(stateToPersist).length > 0
+      ? stateToPersist
+      : (data.result.state as Record<string, unknown> | undefined);
+
     return {
       text: replyText,
       decisionData,
-      rawBackendState: data.result.state as Record<string, unknown> | undefined,
+      rawBackendState: stateToReturn,
       currentScene,
       expertMode,
       routes: rawRoutes,
     };
+  }
+
+  /**
+   * レスポンス内の様々な階層からルートおよび候補 (routes[].candidates[]) を探索・正規化
+   */
+  private extractAllRoutes(data: JinbaBackendRunResponse): Array<unknown> | undefined {
+    const candidateSources = [
+      data.result?.routes,
+      data.result?.state?.routes,
+      (data.result as any)?.shopping_context?.routes,
+      data.result?.state?.shopping_context?.routes,
+      (data.result as any)?.possibility_context?.routes,
+      data.result?.state?.possibility_context?.routes,
+      (data.result as any)?.session_context?.routes,
+      data.result?.state?.session_context?.routes,
+      data.routes,
+      data.state?.routes,
+    ];
+
+    for (const src of candidateSources) {
+      if (!src) continue;
+      if (Array.isArray(src) && src.length > 0) {
+        return src;
+      }
+      if (typeof src === 'object' && Object.keys(src).length > 0) {
+        const obj = src as Record<string, unknown>;
+        if (Array.isArray(obj.routes) && obj.routes.length > 0) {
+          return obj.routes;
+        }
+        if (obj.candidates || obj.candidate || obj.items || obj.products) {
+          return [obj];
+        }
+        const vals = Object.values(src);
+        if (vals.length > 0 && typeof vals[0] === 'object') {
+          return vals;
+        }
+      }
+    }
+    return undefined;
   }
 
   /**
@@ -2039,21 +2069,54 @@ export class RenderBackendChatAdapter implements ChatService {
     const candidateRoutes =
       (Array.isArray(result.routes) ? result.routes : undefined) ||
       (Array.isArray(state?.routes) ? state.routes : undefined) ||
+      (Array.isArray((result as any)?.shopping_context?.routes) ? (result as any).shopping_context.routes : undefined) ||
       (Array.isArray(state?.shopping_context?.routes) ? state.shopping_context.routes : undefined) ||
+      (Array.isArray((result as any)?.possibility_context?.routes) ? (result as any).possibility_context.routes : undefined) ||
       (Array.isArray(state?.possibility_context?.routes) ? state.possibility_context.routes : undefined) ||
-      (Array.isArray(state?.session_context?.routes) ? state.session_context.routes : undefined);
+      (Array.isArray(state?.session_context?.routes) ? state.session_context.routes : undefined) ||
+      (result.routes && typeof result.routes === 'object' ? Object.values(result.routes) : undefined) ||
+      (state?.routes && typeof state.routes === 'object' ? Object.values(state.routes) : undefined);
 
     if (Array.isArray(candidateRoutes)) {
       candidateRoutes.forEach((route: any, rIdx: number) => {
-        const cands = Array.isArray(route?.candidates) ? route.candidates : Array.isArray(route?.items) ? route.items : [];
-        const routeName = route?.name || route?.title;
+        let cands: any[] = [];
+        if (Array.isArray(route?.candidates)) cands = route.candidates;
+        else if (typeof route?.candidates === 'string' && route.candidates.trim()) cands = [route.candidates.trim()];
+        else if (route?.candidate) cands = [route.candidate];
+        else if (Array.isArray(route?.items)) cands = route.items;
+        else if (Array.isArray(route?.products)) cands = route.products;
+        else if (Array.isArray(route?.ingredients)) cands = route.ingredients;
+        const routeName = route?.name || route?.title || route?.section;
+
         cands.forEach((c: any, cIdx: number) => {
-          const title = typeof c === 'string' ? c.trim() : (c?.title || c?.name || c?.item || c?.product || c?.label || '').trim();
+          let title = '';
+          if (typeof c === 'string') {
+            title = c.trim();
+          } else if (c && typeof c === 'object') {
+            const rawTitle =
+              c.title ||
+              c.name ||
+              c.item ||
+              c.ingredient ||
+              c.product ||
+              c.candidate ||
+              c.candidate_name ||
+              c.food ||
+              c.food_name ||
+              c.ingredient_name ||
+              c.product_name ||
+              c.item_name ||
+              c.label ||
+              c.display_name ||
+              c.text ||
+              c.value;
+            title = typeof rawTitle === 'string' ? rawTitle.trim() : '';
+          }
           if (!title) return;
           const exists = mappedOptions.some((o) => o.title.toLowerCase() === title.toLowerCase());
           if (!exists) {
             mappedOptions.push({
-              id: (typeof c === 'object' && c?.id) || `route-opt-${rIdx}-${cIdx}`,
+              id: (typeof c === 'object' && c?.id) || `route-opt-${rIdx}-${cIdx}-${title}`,
               title,
               summary: (typeof c === 'object' && (c?.summary || c?.description || c?.note)) || (routeName ? `店頭で見つけた候補 (${routeName})` : '店頭で見つけた食材'),
               reasons: (typeof c === 'object' && Array.isArray(c?.reasons)) ? c.reasons : ['店頭で見つけた候補'],

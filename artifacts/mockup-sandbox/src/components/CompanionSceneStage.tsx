@@ -152,8 +152,11 @@ export const CompanionSceneStage: React.FC<CompanionSceneStageProps> = ({
 
   // 手持ち食材や可能性から食材テキストを抽出
   possibilities.forEach((p) => {
-    // "手持ち食材: キャベツ, 豚肉" や 単純な食材名
-    const cleaned = p.replace(/^手持ち食材:\s*/, '').replace(/^候補食材:\s*/, '');
+    // "手持ち食材: キャベツ, 豚肉" や "店頭で見つかった食材: 豚肉"
+    const cleaned = p
+      .replace(/^手持ち食材:\s*/, '')
+      .replace(/^候補食材:\s*/, '')
+      .replace(/^店頭で見つかった食材:\s*/, '');
     cleaned.split(/[,、・]/).forEach((part) => {
       const trimmed = part.trim();
       if (trimmed && trimmed.length < 15 && ingredientItems.length < 2) {
@@ -402,7 +405,7 @@ export const CompanionSceneStage: React.FC<CompanionSceneStageProps> = ({
           id="btn-scene-conversation-history"
           onClick={onOpenHistory}
           title="これまでの会話履歴を振り返る"
-          className="absolute top-2.5 left-2.5 sm:top-3 sm:left-3 z-30 flex items-center gap-1.5 px-3 py-1.5 rounded-xl sm:rounded-2xl bg-white/50 dark:bg-stone-950/50 hover:bg-white/65 dark:hover:bg-stone-950/65 active:scale-95 backdrop-blur-md border border-white/60 dark:border-white/15 shadow-sm text-xs font-bold text-stone-800 dark:text-stone-100 transition-all cursor-pointer select-none"
+          className="absolute top-2.5 left-2.5 sm:top-3 sm:left-3 z-20 flex items-center gap-1.5 px-3 py-1.5 rounded-xl sm:rounded-2xl bg-white/50 dark:bg-stone-950/50 hover:bg-white/65 dark:hover:bg-stone-950/65 active:scale-95 backdrop-blur-md border border-white/60 dark:border-white/15 shadow-sm text-xs font-bold text-stone-800 dark:text-stone-100 transition-all cursor-pointer select-none"
         >
           <History className="w-3.5 h-3.5 text-stone-700 dark:text-stone-300" />
           <span>履歴</span>
@@ -419,15 +422,15 @@ export const CompanionSceneStage: React.FC<CompanionSceneStageProps> = ({
       {/* ============================================================ */}
       <div
         id="scene-character-container"
-        className="absolute bottom-0 left-1.5 sm:left-4 z-10 flex flex-col items-center pointer-events-auto select-none"
+        className="absolute bottom-0 left-1.5 sm:left-4 z-25 flex flex-col items-center pointer-events-auto select-none"
       >
         {/* ポコ太 SVGキャラクター（存在感を保ちつつ、左上履歴ボタン枠のすぐ下に耳が収まる微調整サイズ） */}
         <div className="relative w-[154px] h-[212px] sm:w-[162px] sm:h-[224px] shrink-0 drop-shadow-md transition-transform hover:scale-[1.01]">
-          {/* 考え中エフェクト（ポコ太の頭上・耳の間に収まり、画面上端で切れない安全な位置） */}
+          {/* 考え中エフェクト（履歴ボタンの下に入り込まず、iPhoneでも完全に視認できる自然な位置・z-index） */}
           {isTyping && (
             <div
               id="pocota-thinking-indicator"
-              className="absolute top-1 sm:top-1.5 left-1/2 -translate-x-1/2 z-20 flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/95 dark:bg-stone-900/95 backdrop-blur-md shadow-md border border-emerald-400 dark:border-emerald-600 text-xs font-bold text-emerald-800 dark:text-emerald-300 animate-pulse whitespace-nowrap pointer-events-none"
+              className="absolute top-[52px] sm:top-[56px] left-1/2 -translate-x-1/2 z-40 flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/95 dark:bg-stone-900/95 backdrop-blur-md shadow-lg border-2 border-emerald-400 dark:border-emerald-500 text-xs font-bold text-emerald-800 dark:text-emerald-300 animate-pulse whitespace-nowrap pointer-events-none"
             >
               <Sparkles className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 animate-spin" />
               <span>考え中...</span>
