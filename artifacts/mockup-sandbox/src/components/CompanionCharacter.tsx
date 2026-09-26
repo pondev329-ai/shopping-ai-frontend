@@ -9,6 +9,7 @@ import {
   BookOpen,
   Fish,
   Beef,
+  Carrot,
   ChefHat,
   Tag,
   MessageSquareQuote,
@@ -30,6 +31,15 @@ function getExpertInfo(expertMode?: string | null) {
   if (!expertMode) return null;
   const lower = expertMode.toLowerCase();
 
+  if (lower.includes('meat') || lower.includes('肉') || lower.includes('精肉')) {
+    return {
+      title: '精肉・部位の専門家',
+      shortLabel: '精肉専門',
+      icon: Beef,
+      badgeColor: 'bg-rose-100 text-rose-800 border-rose-300',
+      tagline: '部位の特徴・特売肉の活用法を案内中',
+    };
+  }
   if (lower.includes('fish') || lower.includes('魚') || lower.includes('鮮魚')) {
     return {
       title: '鮮魚・お魚の専門家',
@@ -39,13 +49,13 @@ function getExpertInfo(expertMode?: string | null) {
       tagline: '鮮度・旬・下処理のアドバイス中',
     };
   }
-  if (lower.includes('meat') || lower.includes('肉') || lower.includes('精肉')) {
+  if (lower.includes('vegetable') || lower.includes('vege') || lower.includes('produce') || lower.includes('野菜') || lower.includes('青果')) {
     return {
-      title: '精肉・部位の専門家',
-      shortLabel: '精肉専門',
-      icon: Beef,
-      badgeColor: 'bg-rose-100 text-rose-800 border-rose-300',
-      tagline: '部位の特徴・特売肉の活用法を案内中',
+      title: '青果・野菜の専門家',
+      shortLabel: '青果専門',
+      icon: Carrot,
+      badgeColor: 'bg-emerald-100 text-emerald-800 border-emerald-300',
+      tagline: '鮮度・旬・保存方法を案内中',
     };
   }
   if (lower.includes('cook') || lower.includes('chef') || lower.includes('料理') || lower.includes('調理')) {
@@ -68,8 +78,8 @@ function getExpertInfo(expertMode?: string | null) {
   }
 
   return {
-    title: `${expertMode} 専門家`,
-    shortLabel: expertMode,
+    title: expertMode.endsWith('専門') || expertMode.endsWith('専門家') ? expertMode : `${expertMode} 専門家`,
+    shortLabel: expertMode.endsWith('専門') ? expertMode : `${expertMode}専門`,
     icon: Sparkles,
     badgeColor: 'bg-purple-100 text-purple-800 border-purple-300',
     tagline: '専門的な知見からサポート中',

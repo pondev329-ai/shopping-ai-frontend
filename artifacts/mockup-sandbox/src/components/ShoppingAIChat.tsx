@@ -75,6 +75,17 @@ export const getDisplayMessageContent = (content: string, imageUrl?: string): st
   return content;
 };
 
+export const getExpertDisplayLabel = (expertMode?: string | null): string | null => {
+  if (!expertMode) return null;
+  const lower = expertMode.toLowerCase();
+  if (lower.includes('meat') || lower.includes('肉') || lower.includes('精肉')) return '精肉専門';
+  if (lower.includes('fish') || lower.includes('魚') || lower.includes('鮮魚')) return '鮮魚専門';
+  if (lower.includes('vegetable') || lower.includes('vege') || lower.includes('produce') || lower.includes('野菜') || lower.includes('青果')) return '青果専門';
+  if (lower.includes('cook') || lower.includes('chef') || lower.includes('料理') || lower.includes('調理')) return '調理専門';
+  if (lower.includes('bargain') || lower.includes('offer') || lower.includes('特売') || lower.includes('目利き')) return '目利き専門';
+  return expertMode.endsWith('専門') ? expertMode : `${expertMode}専門`;
+};
+
 export const ShoppingAIChat: React.FC<ShoppingAIChatProps> = ({
   chatService = defaultChatService,
 }) => {
@@ -781,9 +792,9 @@ export const ShoppingAIChat: React.FC<ShoppingAIChatProps> = ({
                   <span className="text-xs font-bold text-stone-800 dark:text-stone-200">
                     ポコ太
                   </span>
-                  {activeSession.expertMode && (
+                  {getExpertDisplayLabel(activeSession.expertMode) && (
                     <span className="text-[10px] bg-purple-100 dark:bg-purple-950/80 text-purple-800 dark:text-purple-300 px-1.5 py-0.2 rounded font-semibold border border-purple-200 dark:border-purple-800">
-                      {activeSession.expertMode}専門
+                      {getExpertDisplayLabel(activeSession.expertMode)}
                     </span>
                   )}
                 </div>
@@ -826,9 +837,9 @@ export const ShoppingAIChat: React.FC<ShoppingAIChatProps> = ({
                 <span className="text-xs font-bold text-stone-800 dark:text-stone-200">
                   ポコ太
                 </span>
-                {activeSession.expertMode && (
+                {getExpertDisplayLabel(activeSession.expertMode) && (
                   <span className="text-[10px] bg-purple-100 dark:bg-purple-950/80 text-purple-800 dark:text-purple-300 px-1.5 py-0.2 rounded font-semibold border border-purple-200 dark:border-purple-800">
-                    {activeSession.expertMode}専門
+                    {getExpertDisplayLabel(activeSession.expertMode)}
                   </span>
                 )}
               </div>

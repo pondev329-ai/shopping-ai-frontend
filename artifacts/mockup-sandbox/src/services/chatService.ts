@@ -61,14 +61,31 @@ interface JinbaBackendRunResponse {
     reply?: string;
     parse_success?: boolean;
     current_scene?: string;
-    expert_mode?: string | null;
+    expert_mode?: string | null | { active?: boolean; domain?: string; [key: string]: unknown };
+    routes?: Array<{
+      id?: string;
+      name?: string;
+      title?: string;
+      candidates?: Array<unknown>;
+      items?: Array<unknown>;
+      [key: string]: unknown;
+    }>;
     state?: {
       current_scene?: string;
-      expert_mode?: string | null;
+      expert_mode?: string | null | { active?: boolean; domain?: string; [key: string]: unknown };
       scene?: string;
       expert?: string | null;
       history?: Array<{ role: string; content: string }>;
+      routes?: Array<{
+        id?: string;
+        name?: string;
+        title?: string;
+        candidates?: Array<unknown>;
+        items?: Array<unknown>;
+        [key: string]: unknown;
+      }>;
       possibility_context?: {
+        routes?: Array<unknown>;
         meal_options?: Array<{
           id?: string;
           title?: string;
@@ -98,13 +115,15 @@ interface JinbaBackendRunResponse {
         priorities?: string[];
         shopping_or_home?: string;
         current_scene?: string;
-        expert_mode?: string | null;
+        expert_mode?: string | null | { active?: boolean; domain?: string; [key: string]: unknown };
         decided?: string[];
         undecided?: string[];
+        routes?: Array<unknown>;
       };
       shopping_context?: {
         inventory?: string[];
         selected_product_ids?: string[];
+        routes?: Array<unknown>;
         progress?: {
           total?: number;
           collected?: number;
@@ -1882,9 +1901,31 @@ export class RenderBackendChatAdapter implements ChatService {
       throw new Error(data.error || 'Render Backend execution did not return a valid result.');
     }
 
+    // Main Flowから渡された routes (買い回りルート・候補: routes[].candidates[])
+    const rawRoutes =
+      (Array.isArray(data.result.routes) && data.result.routes.length > 0
+        ? data.result.routes
+        : undefined) ||
+      (Array.isArray(data.result.state?.routes) && data.result.state.routes.length > 0
+        ? data.result.state.routes
+        : undefined) ||
+      (Array.isArray(data.result.state?.shopping_context?.routes) && data.result.state.shopping_context.routes.length > 0
+        ? data.result.state.shopping_context.routes
+        : undefined) ||
+      (Array.isArray(data.result.state?.possibility_context?.routes) && data.result.state.possibility_context.routes.length > 0
+        ? data.result.state.possibility_context.routes
+        : undefined) ||
+      (Array.isArray(data.result.state?.session_context?.routes) && data.result.state.session_context.routes.length > 0
+        ? data.result.state.session_context.routes
+        : undefined);
+
     // 次回ターン用のBackend Stateを更新・永続化
     if (data.result.state) {
-      this.persistState(data.result.state as Record<string, unknown>);
+      const stateToPersist = { ...(data.result.state as Record<string, unknown>) };
+      if (rawRoutes && !stateToPersist.routes) {
+        stateToPersist.routes = rawRoutes;
+      }
+      this.persistState(stateToPersist);
     }
 
     const replyText = data.result.reply || '応答を受け付けました。';
@@ -1910,20 +1951,39 @@ export class RenderBackendChatAdapter implements ChatService {
     }
 
     // Main Flowから渡された expert_mode の抽出
+    // session_context.expert_mode = { active: true, domain: "meat" } または string / null を優先
     const rawExpert =
-      data.result.expert_mode !== undefined
+      data.result.state?.session_context?.expert_mode !== undefined
+        ? data.result.state?.session_context?.expert_mode
+        : data.result.expert_mode !== undefined
         ? data.result.expert_mode
         : data.result.state?.expert_mode !== undefined
         ? data.result.state?.expert_mode
-        : data.result.state?.session_context?.expert_mode !== undefined
-        ? data.result.state?.session_context?.expert_mode
         : data.result.state?.expert;
 
     let expertMode: string | null | undefined = undefined;
     if (rawExpert !== undefined) {
-      if (typeof rawExpert === 'string' && rawExpert.trim()) {
-        expertMode = rawExpert.trim();
-      } else if (rawExpert === null || rawExpert === 'none' || rawExpert === false) {
+      if (typeof rawExpert === 'object' && rawExpert !== null) {
+        const expObj = rawExpert as { active?: boolean; domain?: string; mode?: string; name?: string; type?: string };
+        if (expObj.active === false) {
+          expertMode = null;
+        } else if (expObj.domain && typeof expObj.domain === 'string') {
+          expertMode = expObj.domain.trim();
+        } else if (expObj.mode && typeof expObj.mode === 'string') {
+          expertMode = expObj.mode.trim();
+        } else if (expObj.name && typeof expObj.name === 'string') {
+          expertMode = expObj.name.trim();
+        } else if (expObj.type && typeof expObj.type === 'string') {
+          expertMode = expObj.type.trim();
+        } else if (expObj.active === true) {
+          expertMode = 'active';
+        } else {
+          expertMode = null;
+        }
+      } else if (typeof rawExpert === 'string' && rawExpert.trim()) {
+        const trimmed = rawExpert.trim();
+        expertMode = trimmed === 'none' || trimmed === 'false' ? null : trimmed;
+      } else if (rawExpert === null || rawExpert === false) {
         expertMode = null;
       }
     }
@@ -1934,13 +1994,14 @@ export class RenderBackendChatAdapter implements ChatService {
       rawBackendState: data.result.state as Record<string, unknown> | undefined,
       currentScene,
       expertMode,
+      routes: rawRoutes,
     };
   }
 
   /**
    * Main Flowの実行結果からフロントエンド表示用の判断材料・候補データを抽出します。
    * ※ フロントエンド側で判断・評価を行うのではなく、バックエンドから渡された
-   *    可能性・優先事項・選択肢（meal_options等）を型安全にマッピングする処理です。
+   *    可能性・優先事項・選択肢（meal_options 及び routes[].candidates[]）を型安全にマッピングする処理です。
    */
   private extractDecisionData(result: NonNullable<JinbaBackendRunResponse['result']>): InlineDecisionPayload | undefined {
     const state = result.state;
@@ -1955,20 +2016,55 @@ export class RenderBackendChatAdapter implements ChatService {
       hasData = true;
     }
 
-    // 2. バックエンドから渡された選択肢 (meal_options) のマッピング
+    // 2. バックエンドから渡された選択肢 (meal_options 及び routes[].candidates[]) のマッピング
     const rawOptions = state?.possibility_context?.meal_options;
-    if (Array.isArray(rawOptions) && rawOptions.length > 0) {
-      const mappedOptions: SuggestionOption[] = rawOptions.map((opt, idx) => ({
-        id: opt.id || `opt-${idx}`,
-        title: opt.title || opt.name || `候補 ${idx + 1}`,
-        summary: opt.summary || opt.description || '',
-        reasons: Array.isArray(opt.reasons) ? opt.reasons : [],
-        prepTimeMinutes: opt.prep_time_minutes ?? opt.prepTimeMinutes,
-        effortLevel: opt.effort_level ?? opt.effortLevel,
-        additionalGroceries: opt.additional_groceries ?? opt.additionalGroceries,
-        requiresShopping: opt.requires_shopping ?? opt.requiresShopping,
-      }));
+    const mappedOptions: SuggestionOption[] = [];
 
+    if (Array.isArray(rawOptions) && rawOptions.length > 0) {
+      mappedOptions.push(
+        ...rawOptions.map((opt, idx) => ({
+          id: opt.id || `opt-${idx}`,
+          title: opt.title || opt.name || `候補 ${idx + 1}`,
+          summary: opt.summary || opt.description || '',
+          reasons: Array.isArray(opt.reasons) ? opt.reasons : [],
+          prepTimeMinutes: opt.prep_time_minutes ?? opt.prepTimeMinutes,
+          effortLevel: opt.effort_level ?? opt.effortLevel,
+          additionalGroceries: opt.additional_groceries ?? opt.additionalGroceries,
+          requiresShopping: opt.requires_shopping ?? opt.requiresShopping,
+        }))
+      );
+    }
+
+    // routes[].candidates[] からの候補の追加（店頭で見つけた食材）
+    const candidateRoutes =
+      (Array.isArray(result.routes) ? result.routes : undefined) ||
+      (Array.isArray(state?.routes) ? state.routes : undefined) ||
+      (Array.isArray(state?.shopping_context?.routes) ? state.shopping_context.routes : undefined) ||
+      (Array.isArray(state?.possibility_context?.routes) ? state.possibility_context.routes : undefined) ||
+      (Array.isArray(state?.session_context?.routes) ? state.session_context.routes : undefined);
+
+    if (Array.isArray(candidateRoutes)) {
+      candidateRoutes.forEach((route: any, rIdx: number) => {
+        const cands = Array.isArray(route?.candidates) ? route.candidates : Array.isArray(route?.items) ? route.items : [];
+        const routeName = route?.name || route?.title;
+        cands.forEach((c: any, cIdx: number) => {
+          const title = typeof c === 'string' ? c.trim() : (c?.title || c?.name || c?.item || c?.product || c?.label || '').trim();
+          if (!title) return;
+          const exists = mappedOptions.some((o) => o.title.toLowerCase() === title.toLowerCase());
+          if (!exists) {
+            mappedOptions.push({
+              id: (typeof c === 'object' && c?.id) || `route-opt-${rIdx}-${cIdx}`,
+              title,
+              summary: (typeof c === 'object' && (c?.summary || c?.description || c?.note)) || (routeName ? `店頭で見つけた候補 (${routeName})` : '店頭で見つけた食材'),
+              reasons: (typeof c === 'object' && Array.isArray(c?.reasons)) ? c.reasons : ['店頭で見つけた候補'],
+              requiresShopping: true,
+            });
+          }
+        });
+      });
+    }
+
+    if (mappedOptions.length > 0) {
       payload.options = mappedOptions;
       hasData = true;
     }

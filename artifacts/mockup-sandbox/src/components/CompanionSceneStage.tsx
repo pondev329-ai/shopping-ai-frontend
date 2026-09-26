@@ -4,6 +4,7 @@ import { SessionStatusSummary } from '../types/session';
 import {
   Fish,
   Beef,
+  Carrot,
   ChefHat,
   Tag,
   Sparkles,
@@ -28,6 +29,16 @@ function getExpertMeta(expertMode?: string | null) {
   if (!expertMode) return null;
   const lower = expertMode.toLowerCase();
 
+  if (lower.includes('meat') || lower.includes('肉') || lower.includes('精肉')) {
+    return {
+      type: 'meat',
+      title: '精肉・部位の専門家',
+      label: '精肉専門',
+      icon: Beef,
+      badgeStyle: 'bg-rose-500 text-white border-rose-400 shadow-xs',
+      description: '特売肉の活用・部位の提案中',
+    };
+  }
   if (lower.includes('fish') || lower.includes('魚') || lower.includes('鮮魚')) {
     return {
       type: 'fish',
@@ -38,14 +49,14 @@ function getExpertMeta(expertMode?: string | null) {
       description: '旬の魚と鮮度の目利き中',
     };
   }
-  if (lower.includes('meat') || lower.includes('肉') || lower.includes('精肉')) {
+  if (lower.includes('vegetable') || lower.includes('vege') || lower.includes('produce') || lower.includes('野菜') || lower.includes('青果')) {
     return {
-      type: 'meat',
-      title: '精肉・部位の専門家',
-      label: '精肉専門',
-      icon: Beef,
-      badgeStyle: 'bg-rose-500 text-white border-rose-400 shadow-xs',
-      description: '特売肉の活用・部位の提案中',
+      type: 'vegetable',
+      title: '青果・野菜の専門家',
+      label: '青果専門',
+      icon: Carrot,
+      badgeStyle: 'bg-emerald-600 text-white border-emerald-500 shadow-xs',
+      description: '鮮度・旬・保存方法のアドバイス中',
     };
   }
   if (lower.includes('cook') || lower.includes('chef') || lower.includes('料理') || lower.includes('調理')) {
@@ -71,8 +82,8 @@ function getExpertMeta(expertMode?: string | null) {
 
   return {
     type: 'generic',
-    title: `${expertMode} 専門家`,
-    label: expertMode,
+    title: expertMode.endsWith('専門') || expertMode.endsWith('専門家') ? expertMode : `${expertMode} 専門家`,
+    label: expertMode.endsWith('専門') ? expertMode : `${expertMode}専門`,
     icon: Sparkles,
     badgeStyle: 'bg-purple-600 text-white border-purple-500 shadow-xs',
     description: '専門的視点でアドバイス中',
@@ -178,7 +189,21 @@ export const CompanionSceneStage: React.FC<CompanionSceneStageProps> = ({
     });
   }
 
-  // B. 食材アイテム
+  // B. 候補（店頭で見つかった食材や検討中の選択肢）を優先表示
+  if (candidateCount > 0) {
+    const latestCandidate = statusSummary?.candidates?.[statusSummary.candidates.length - 1]?.title;
+    const firstCandidate = statusSummary?.candidates?.[0]?.title;
+    const candTitle = latestCandidate || firstCandidate;
+    displayStatusLines.push({
+      icon: '✨',
+      text: candTitle
+        ? `${candidateCount}つの候補 (${candTitle.slice(0, 8)}${candTitle.length > 8 ? '…' : ''})`
+        : `${candidateCount}つの候補`,
+      badge: `${candidateCount}件`,
+    });
+  }
+
+  // C. 食材アイテム
   ingredientItems.forEach((item) => {
     if (displayStatusLines.length < 3) {
       displayStatusLines.push({
@@ -187,17 +212,6 @@ export const CompanionSceneStage: React.FC<CompanionSceneStageProps> = ({
       });
     }
   });
-
-  // C. 候補
-  if (candidateCount > 0 && displayStatusLines.length < 3) {
-    displayStatusLines.push({
-      icon: '✨',
-      text: statusSummary?.candidates?.[0]?.title
-        ? `${candidateCount}つの候補 (${statusSummary.candidates[0].title.slice(0, 8)}…)`
-        : `${candidateCount}つの候補`,
-      badge: `${candidateCount}件`,
-    });
-  }
 
   // D. 買い物進行度
   if (scene === 'shopping' && progress?.totalItems && displayStatusLines.length < 3) {
@@ -407,16 +421,19 @@ export const CompanionSceneStage: React.FC<CompanionSceneStageProps> = ({
         id="scene-character-container"
         className="absolute bottom-0 left-1.5 sm:left-4 z-10 flex flex-col items-center pointer-events-auto select-none"
       >
-        {/* 考え中エフェクト（ポコ太の頭上にふわっと浮かぶ） */}
-        {isTyping && (
-          <div className="mb-1 z-20 flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/95 dark:bg-stone-900/95 backdrop-blur-md shadow-md border border-emerald-400 dark:border-emerald-600 text-xs font-bold text-emerald-800 dark:text-emerald-300 animate-bounce whitespace-nowrap">
-            <Sparkles className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 animate-spin" />
-            <span>考え中...</span>
-          </div>
-        )}
-
         {/* ポコ太 SVGキャラクター（存在感を保ちつつ、左上履歴ボタン枠のすぐ下に耳が収まる微調整サイズ） */}
         <div className="relative w-[154px] h-[212px] sm:w-[162px] sm:h-[224px] shrink-0 drop-shadow-md transition-transform hover:scale-[1.01]">
+          {/* 考え中エフェクト（ポコ太の頭上・耳の間に収まり、画面上端で切れない安全な位置） */}
+          {isTyping && (
+            <div
+              id="pocota-thinking-indicator"
+              className="absolute top-1 sm:top-1.5 left-1/2 -translate-x-1/2 z-20 flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/95 dark:bg-stone-900/95 backdrop-blur-md shadow-md border border-emerald-400 dark:border-emerald-600 text-xs font-bold text-emerald-800 dark:text-emerald-300 animate-pulse whitespace-nowrap pointer-events-none"
+            >
+              <Sparkles className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 animate-spin" />
+              <span>考え中...</span>
+            </div>
+          )}
+
           <svg
             viewBox="0 0 160 220"
             className="w-full h-full"
@@ -526,6 +543,20 @@ export const CompanionSceneStage: React.FC<CompanionSceneStageProps> = ({
                 <path d="M40 58 C60 48, 100 48, 120 58" stroke="#0284c7" strokeWidth="7" strokeLinecap="round" />
                 <path d="M42 58 C62 48, 98 48, 118 58" stroke="#ffffff" strokeWidth="3" strokeLinecap="round" strokeDasharray="6 4" />
                 <circle cx="38" cy="60" r="4" fill="#0284c7" />
+              </g>
+            )}
+
+            {expertMeta?.type === 'meat' && (
+              <g>
+                <path d="M40 58 C60 48, 100 48, 120 58" stroke="#e11d48" strokeWidth="6" strokeLinecap="round" />
+                <circle cx="38" cy="60" r="4" fill="#e11d48" />
+              </g>
+            )}
+
+            {expertMeta?.type === 'vegetable' && (
+              <g>
+                <path d="M40 58 C60 48, 100 48, 120 58" stroke="#16a34a" strokeWidth="6" strokeLinecap="round" />
+                <circle cx="38" cy="60" r="4" fill="#16a34a" />
               </g>
             )}
 

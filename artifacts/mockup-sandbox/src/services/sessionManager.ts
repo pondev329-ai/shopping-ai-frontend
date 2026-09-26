@@ -145,7 +145,137 @@ export function extractStatusSummary(
     }));
   }
 
-  // 3. 現在の可能性 (shopping_context.inventory + ingredients + flyer)
+  // 2-B. Main Flowの routes[].candidates[] （店頭で見つけた食材・候補）を抽出して統合
+  const rawRouteSources: unknown[] = [
+    (backendState as any)?.routes,
+    (backendState as any)?.shopping_context?.routes,
+    (backendState as any)?.possibility_context?.routes,
+    (backendState as any)?.session_context?.routes,
+    latestResponse?.routes,
+    (latestResponse?.rawBackendState as any)?.routes,
+    (latestResponse?.rawBackendState as any)?.shopping_context?.routes,
+    (latestResponse?.rawBackendState as any)?.possibility_context?.routes,
+    (latestResponse?.rawBackendState as any)?.session_context?.routes,
+  ];
+
+  const foundStoreCandidates: string[] = [];
+
+  rawRouteSources.forEach((source) => {
+    if (!source) return;
+    const routesList: unknown[] = Array.isArray(source)
+      ? source
+      : typeof source === 'object'
+      ? Object.values(source)
+      : [];
+
+    routesList.forEach((routeItem, rIdx) => {
+      if (!routeItem || typeof routeItem !== 'object') return;
+      const r = routeItem as Record<string, unknown>;
+      const routeTitle = String(r.name || r.title || r.section || '').trim();
+      const rawCands = Array.isArray(r.candidates)
+        ? r.candidates
+        : Array.isArray(r.items)
+        ? r.items
+        : Array.isArray(r.products)
+        ? r.products
+        : [];
+
+      rawCands.forEach((cand, cIdx) => {
+        if (!cand) return;
+        let id: string;
+        let title: string;
+        let summaryText: string | undefined;
+        let reasons: string[] | undefined;
+        let prepTimeMinutes: number | undefined;
+        let requiresShopping: boolean = true;
+
+        if (typeof cand === 'string') {
+          title = cand.trim();
+          if (!title) return;
+          id = `route-cand-${rIdx}-${cIdx}-${title}`;
+          summaryText = routeTitle ? `店頭で見つけた候補 (${routeTitle})` : '店頭で見つけた食材';
+          reasons = ['店頭での発見・候補食材'];
+        } else if (typeof cand === 'object' && cand !== null) {
+          const c = cand as Record<string, unknown>;
+          const rawTitle = c.title || c.name || c.item || c.ingredient || c.product || c.candidate || c.label || c.text;
+          title = typeof rawTitle === 'string' ? rawTitle.trim() : '';
+          if (!title) return;
+          id = typeof c.id === 'string' && c.id.trim() ? c.id.trim() : `route-cand-${rIdx}-${cIdx}-${title}`;
+          summaryText =
+            typeof c.summary === 'string' && c.summary.trim()
+              ? c.summary.trim()
+              : typeof c.description === 'string' && c.description.trim()
+              ? c.description.trim()
+              : typeof c.note === 'string' && c.note.trim()
+              ? c.note.trim()
+              : c.price !== undefined
+              ? `価格: ${c.price}円`
+              : routeTitle
+              ? `店頭で見つけた候補 (${routeTitle})`
+              : '店頭で見つけた食材';
+          if (Array.isArray(c.reasons) && c.reasons.length > 0) {
+            reasons = c.reasons.map((item) => String(item)).filter(Boolean);
+          } else if (typeof c.reason === 'string' && c.reason.trim()) {
+            reasons = [c.reason.trim()];
+          } else {
+            reasons = ['店頭での発見・候補食材'];
+          }
+          if (typeof c.prep_time_minutes === 'number') prepTimeMinutes = c.prep_time_minutes;
+          else if (typeof c.prepTimeMinutes === 'number') prepTimeMinutes = c.prepTimeMinutes;
+          if (typeof c.requires_shopping === 'boolean') requiresShopping = c.requires_shopping;
+          else if (typeof c.requiresShopping === 'boolean') requiresShopping = c.requiresShopping;
+        } else {
+          return;
+        }
+
+        foundStoreCandidates.push(title);
+
+        const existingIdx = summary.candidates.findIndex(
+          (c) => c.id === id || c.title.toLowerCase() === title.toLowerCase()
+        );
+        if (existingIdx >= 0) {
+          summary.candidates[existingIdx] = {
+            ...summary.candidates[existingIdx],
+            summary: summary.candidates[existingIdx].summary || summaryText,
+            reasons: summary.candidates[existingIdx].reasons || reasons,
+            prepTimeMinutes: summary.candidates[existingIdx].prepTimeMinutes ?? prepTimeMinutes,
+            requiresShopping: summary.candidates[existingIdx].requiresShopping ?? requiresShopping,
+          };
+        } else {
+          summary.candidates.push({
+            id,
+            title,
+            summary: summaryText,
+            reasons,
+            prepTimeMinutes,
+            requiresShopping,
+          });
+        }
+      });
+    });
+  });
+
+  // latestResponse.decisionData.options も確認し、未登録の候補があれば追加
+  if (latestResponse?.decisionData?.options && Array.isArray(latestResponse.decisionData.options)) {
+    latestResponse.decisionData.options.forEach((opt) => {
+      if (!opt.title) return;
+      const existing = summary.candidates.some(
+        (c) => c.id === opt.id || c.title.toLowerCase() === opt.title.toLowerCase()
+      );
+      if (!existing) {
+        summary.candidates.push({
+          id: opt.id,
+          title: opt.title,
+          summary: opt.summary,
+          reasons: opt.reasons,
+          prepTimeMinutes: opt.prepTimeMinutes,
+          requiresShopping: opt.requiresShopping,
+        });
+      }
+    });
+  }
+
+  // 3. 現在の可能性 (shopping_context.inventory + ingredients + flyer + 店頭発見食材)
   const shoppingCtx = backendState.shopping_context as {
     inventory?: string[];
     selected_product_ids?: string[];
@@ -171,6 +301,10 @@ export function extractStatusSummary(
     if (recipeNames.length > 0) {
       summary.possibilities.push(`関連レシピ候補: ${recipeNames.slice(0, 3).join(' / ')}`);
     }
+  }
+  if (foundStoreCandidates.length > 0) {
+    const uniqueStoreCands = Array.from(new Set(foundStoreCandidates));
+    summary.possibilities.push(`店頭で見つかった食材: ${uniqueStoreCands.join(', ')}`);
   }
 
   // 4. 決まったこと & まだ決まっていないこと

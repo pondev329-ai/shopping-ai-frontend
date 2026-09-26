@@ -61,4 +61,6 @@ export interface ChatResponse {
   currentScene?: AppScene;
   /** Main Flowから渡された専門家モード */
   expertMode?: string | null;
+  /** Main Flowから渡されたルート・候補（routes[].candidates[]） */
+  routes?: Array<unknown>;
 }
