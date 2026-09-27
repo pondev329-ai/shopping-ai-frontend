@@ -165,7 +165,15 @@ export function extractStatusSummary(
       if (Array.isArray(obj.routes)) {
         return collectRouteObjects(obj.routes);
       }
-      if (obj.candidates || obj.candidate || obj.items || obj.products || obj.ingredients) {
+      if (
+        obj.candidates ||
+        obj.candidate ||
+        obj.items ||
+        obj.products ||
+        obj.ingredients ||
+        obj.candidate_list ||
+        obj.options
+      ) {
         return [obj];
       }
       const vals = Object.values(obj);
@@ -176,16 +184,64 @@ export function extractStatusSummary(
     return [];
   }
 
+  function extractCandidateTitle(cand: unknown): string {
+    if (typeof cand === 'string') return cand.trim();
+    if (!cand || typeof cand !== 'object') return '';
+    const c = cand as Record<string, unknown>;
+    const directFields = [
+      c.title,
+      c.name,
+      c.item,
+      c.ingredient,
+      c.product,
+      c.candidate,
+      c.candidate_name,
+      c.food,
+      c.food_name,
+      c.ingredient_name,
+      c.product_name,
+      c.item_name,
+      c.label,
+      c.display_name,
+      c.display,
+      c.text,
+      c.japanese,
+      c.ja,
+      c.value,
+    ];
+    for (const f of directFields) {
+      if (typeof f === 'string' && f.trim()) return f.trim();
+      if (f && typeof f === 'object') {
+        const nested = extractCandidateTitle(f);
+        if (nested) return nested;
+      }
+    }
+    if (typeof c.id === 'string' && c.id.trim() && isNaN(Number(c.id))) {
+      return c.id.trim();
+    }
+    const keys = Object.keys(c);
+    if (keys.length === 1 && typeof keys[0] === 'string' && keys[0].trim() && isNaN(Number(keys[0]))) {
+      return keys[0].trim();
+    }
+    return '';
+  }
+
   const rawRouteSources: unknown[] = [
     (backendState as any)?.routes,
     (backendState as any)?.shopping_context?.routes,
+    (backendState as any)?.shopping?.routes,
     (backendState as any)?.possibility_context?.routes,
     (backendState as any)?.session_context?.routes,
+    (backendState as any)?.state?.routes,
+    (backendState as any)?.state?.shopping_context?.routes,
+    (backendState as any)?.state?.shopping?.routes,
     latestResponse?.routes,
     (latestResponse?.rawBackendState as any)?.routes,
     (latestResponse?.rawBackendState as any)?.shopping_context?.routes,
+    (latestResponse?.rawBackendState as any)?.shopping?.routes,
     (latestResponse?.rawBackendState as any)?.possibility_context?.routes,
     (latestResponse?.rawBackendState as any)?.session_context?.routes,
+    (latestResponse?.rawBackendState as any)?.state?.routes,
   ];
 
   const foundStoreCandidates: string[] = [];
@@ -195,85 +251,54 @@ export function extractStatusSummary(
     const routesList = collectRouteObjects(source);
 
     routesList.forEach((r, rIdx) => {
-      const routeTitle = String(r.name || r.title || r.section || r.label || '').trim();
-      let rawCands: unknown[] = [];
-      if (Array.isArray(r.candidates)) rawCands = r.candidates;
-      else if (typeof r.candidates === 'string' && r.candidates.trim()) rawCands = [r.candidates.trim()];
-      else if (r.candidates && typeof r.candidates === 'object') rawCands = Object.values(r.candidates);
-      else if (r.candidate) rawCands = [r.candidate];
-      else if (Array.isArray(r.items)) rawCands = r.items;
-      else if (Array.isArray(r.products)) rawCands = r.products;
-      else if (Array.isArray(r.ingredients)) rawCands = r.ingredients;
+      const routeTitle = String(
+        r.name || r.title || r.section || r.label || r.route || r.category || r.aisle || ''
+      ).trim();
+      const rawCands: unknown[] = [];
+      if (Array.isArray(r.candidates) && r.candidates.length > 0) rawCands.push(...r.candidates);
+      else if (typeof r.candidates === 'string' && r.candidates.trim()) rawCands.push(r.candidates.trim());
+      else if (r.candidates && typeof r.candidates === 'object') rawCands.push(...Object.values(r.candidates));
+
+      if (r.candidate) rawCands.push(r.candidate);
+      if (Array.isArray(r.items) && r.items.length > 0) rawCands.push(...r.items);
+      if (Array.isArray(r.products) && r.products.length > 0) rawCands.push(...r.products);
+      if (Array.isArray(r.ingredients) && r.ingredients.length > 0) rawCands.push(...r.ingredients);
+      if (Array.isArray(r.candidate_list) && r.candidate_list.length > 0) rawCands.push(...r.candidate_list);
 
       rawCands.forEach((cand, cIdx) => {
         if (!cand) return;
-        let id: string;
-        let title: string = '';
-        let summaryText: string | undefined;
-        let reasons: string[] | undefined;
-        let prepTimeMinutes: number | undefined;
-        let requiresShopping: boolean = true;
+        const title = extractCandidateTitle(cand);
+        if (!title) return;
 
-        if (typeof cand === 'string') {
-          title = cand.trim();
-          if (!title) return;
-          id = `route-cand-${rIdx}-${cIdx}-${title}`;
-          summaryText = routeTitle ? `店頭で見つけた候補 (${routeTitle})` : '店頭で見つけた食材';
-          reasons = ['店頭での発見・候補食材'];
-        } else if (typeof cand === 'object' && cand !== null) {
+        let id = `route-cand-${rIdx}-${cIdx}-${title}`;
+        let summaryText = routeTitle ? `店頭で見つけた候補 (${routeTitle})` : '店頭で見つけた食材';
+        let reasons: string[] = ['店頭での発見・候補食材'];
+        let prepTimeMinutes: number | undefined;
+        let requiresShopping = true;
+
+        if (typeof cand === 'object' && cand !== null) {
           const c = cand as Record<string, unknown>;
-          const rawTitle =
-            c.title ||
-            c.name ||
-            c.item ||
-            c.ingredient ||
-            c.product ||
-            c.candidate ||
-            c.candidate_name ||
-            c.food ||
-            c.food_name ||
-            c.ingredient_name ||
-            c.product_name ||
-            c.item_name ||
-            c.label ||
-            c.display_name ||
-            c.text ||
-            c.value;
-          if (typeof rawTitle === 'string' && rawTitle.trim()) {
-            title = rawTitle.trim();
-          } else {
-            const keys = Object.keys(c);
-            if (keys.length === 1 && typeof keys[0] === 'string' && keys[0].trim() && isNaN(Number(keys[0]))) {
-              title = keys[0].trim();
-            }
+          if (typeof c.id === 'string' && c.id.trim()) {
+            id = c.id.trim();
           }
-          if (!title) return;
-          id = typeof c.id === 'string' && c.id.trim() ? c.id.trim() : `route-cand-${rIdx}-${cIdx}-${title}`;
-          summaryText =
-            typeof c.summary === 'string' && c.summary.trim()
-              ? c.summary.trim()
-              : typeof c.description === 'string' && c.description.trim()
-              ? c.description.trim()
-              : typeof c.note === 'string' && c.note.trim()
-              ? c.note.trim()
-              : c.price !== undefined
-              ? `価格: ${c.price}円`
-              : routeTitle
-              ? `店頭で見つけた候補 (${routeTitle})`
-              : '店頭で見つけた食材';
+          if (typeof c.summary === 'string' && c.summary.trim()) {
+            summaryText = c.summary.trim();
+          } else if (typeof c.description === 'string' && c.description.trim()) {
+            summaryText = c.description.trim();
+          } else if (typeof c.note === 'string' && c.note.trim()) {
+            summaryText = c.note.trim();
+          } else if (c.price !== undefined) {
+            summaryText = `価格: ${c.price}円`;
+          }
           if (Array.isArray(c.reasons) && c.reasons.length > 0) {
             reasons = c.reasons.map((item) => String(item)).filter(Boolean);
           } else if (typeof c.reason === 'string' && c.reason.trim()) {
             reasons = [c.reason.trim()];
-          } else {
-            reasons = ['店頭での発見・候補食材'];
           }
           if (typeof c.prep_time_minutes === 'number') prepTimeMinutes = c.prep_time_minutes;
           else if (typeof c.prepTimeMinutes === 'number') prepTimeMinutes = c.prepTimeMinutes;
           if (typeof c.requires_shopping === 'boolean') requiresShopping = c.requires_shopping;
           else if (typeof c.requiresShopping === 'boolean') requiresShopping = c.requiresShopping;
-        } else {
-          return;
         }
 
         foundStoreCandidates.push(title);

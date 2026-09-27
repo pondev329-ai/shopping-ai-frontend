@@ -204,6 +204,16 @@ export const CompanionSceneStage: React.FC<CompanionSceneStageProps> = ({
         : `${candidateCount}つの候補`,
       badge: `${candidateCount}件`,
     });
+
+    // 候補食材をStatusカードの行としても直接把握できるよう追加
+    statusSummary.candidates.slice(-2).reverse().forEach((c) => {
+      if (displayStatusLines.length < 3 && c.title) {
+        displayStatusLines.push({
+          icon: getIngredientIcon(c.title),
+          text: `${c.title} (候補)`,
+        });
+      }
+    });
   }
 
   // C. 食材アイテム
@@ -397,25 +407,37 @@ export const CompanionSceneStage: React.FC<CompanionSceneStageProps> = ({
       )}
 
       {/* ============================================================ */}
-      {/* 2. 左上：対話履歴ボタン（ポコ太と重ならず、Statusと対をなす半透明デザイン） */}
+      {/* 2. 左上：対話履歴ボタン ＆ 考え中インジケータ（ポコ太の顔・目に一切重ならない独立した上部スペース） */}
       {/* ============================================================ */}
-      {onOpenHistory && (
-        <button
-          type="button"
-          id="btn-scene-conversation-history"
-          onClick={onOpenHistory}
-          title="これまでの会話履歴を振り返る"
-          className="absolute top-2.5 left-2.5 sm:top-3 sm:left-3 z-20 flex items-center gap-1.5 px-3 py-1.5 rounded-xl sm:rounded-2xl bg-white/50 dark:bg-stone-950/50 hover:bg-white/65 dark:hover:bg-stone-950/65 active:scale-95 backdrop-blur-md border border-white/60 dark:border-white/15 shadow-sm text-xs font-bold text-stone-800 dark:text-stone-100 transition-all cursor-pointer select-none"
-        >
-          <History className="w-3.5 h-3.5 text-stone-700 dark:text-stone-300" />
-          <span>履歴</span>
-          {historyCount !== undefined && historyCount > 0 && (
-            <span className="text-[10px] text-stone-500 dark:text-stone-400 font-mono">
-              ({historyCount})
-            </span>
-          )}
-        </button>
-      )}
+      <div className="absolute top-2.5 left-2.5 sm:top-3 sm:left-3 z-30 flex items-center gap-1.5 sm:gap-2 max-w-[calc(100%-180px)] min-[390px]:max-w-[calc(100%-195px)] pointer-events-auto">
+        {onOpenHistory && (
+          <button
+            type="button"
+            id="btn-scene-conversation-history"
+            onClick={onOpenHistory}
+            title="これまでの会話履歴を振り返る"
+            className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl sm:rounded-2xl bg-white/70 dark:bg-stone-950/70 hover:bg-white/85 dark:hover:bg-stone-950/85 active:scale-95 backdrop-blur-md border border-white/60 dark:border-white/15 shadow-xs text-xs font-bold text-stone-800 dark:text-stone-100 transition-all cursor-pointer select-none shrink-0"
+          >
+            <History className="w-3.5 h-3.5 text-stone-700 dark:text-stone-300" />
+            <span>履歴</span>
+            {historyCount !== undefined && historyCount > 0 && (
+              <span className="text-[10px] text-stone-500 dark:text-stone-400 font-mono">
+                ({historyCount})
+              </span>
+            )}
+          </button>
+        )}
+
+        {isTyping && (
+          <div
+            id="pocota-thinking-indicator"
+            className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl sm:rounded-2xl bg-white/95 dark:bg-stone-900/95 backdrop-blur-md shadow-md border border-emerald-400 dark:border-emerald-500 text-xs font-bold text-emerald-800 dark:text-emerald-300 animate-pulse whitespace-nowrap shrink-0 pointer-events-none"
+          >
+            <Sparkles className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 animate-spin" />
+            <span>考え中...</span>
+          </div>
+        )}
+      </div>
 
       {/* ============================================================ */}
       {/* 3. 左側：ポコ太（現在のシーン世界の中に立つアシスタント） */}
@@ -426,17 +448,6 @@ export const CompanionSceneStage: React.FC<CompanionSceneStageProps> = ({
       >
         {/* ポコ太 SVGキャラクター（存在感を保ちつつ、左上履歴ボタン枠のすぐ下に耳が収まる微調整サイズ） */}
         <div className="relative w-[154px] h-[212px] sm:w-[162px] sm:h-[224px] shrink-0 drop-shadow-md transition-transform hover:scale-[1.01]">
-          {/* 考え中エフェクト（履歴ボタンの下に入り込まず、iPhoneでも完全に視認できる自然な位置・z-index） */}
-          {isTyping && (
-            <div
-              id="pocota-thinking-indicator"
-              className="absolute top-[52px] sm:top-[56px] left-1/2 -translate-x-1/2 z-40 flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/95 dark:bg-stone-900/95 backdrop-blur-md shadow-lg border-2 border-emerald-400 dark:border-emerald-500 text-xs font-bold text-emerald-800 dark:text-emerald-300 animate-pulse whitespace-nowrap pointer-events-none"
-            >
-              <Sparkles className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 animate-spin" />
-              <span>考え中...</span>
-            </div>
-          )}
-
           <svg
             viewBox="0 0 160 220"
             className="w-full h-full"
@@ -611,7 +622,7 @@ export const CompanionSceneStage: React.FC<CompanionSceneStageProps> = ({
           }
         }}
         title="タップして詳しいステータス・認識詳細を確認"
-        className="absolute top-2.5 right-2.5 sm:top-3 sm:right-3 bottom-2.5 sm:bottom-3 z-20 w-[185px] sm:w-[215px] md:w-[235px] bg-white/45 dark:bg-stone-950/45 hover:bg-white/55 dark:hover:bg-stone-950/55 backdrop-blur-md rounded-xl sm:rounded-2xl border border-white/60 dark:border-white/15 shadow-sm p-2.5 sm:p-3 flex flex-col justify-between cursor-pointer transition-all active:scale-[0.99] group text-left"
+        className="absolute top-2.5 right-2.5 sm:top-3 sm:right-3 bottom-2.5 sm:bottom-3 z-20 w-[172px] min-[390px]:w-[185px] sm:w-[215px] md:w-[235px] bg-white/45 dark:bg-stone-950/45 hover:bg-white/55 dark:hover:bg-stone-950/55 backdrop-blur-md rounded-xl sm:rounded-2xl border border-white/60 dark:border-white/15 shadow-sm p-2.5 sm:p-3 flex flex-col justify-between cursor-pointer transition-all active:scale-[0.99] group text-left"
       >
         {/* カード最上部：現在のシーン表示（「大」基準でハッキリ視認） */}
         <div className="flex items-center justify-between border-b border-stone-800/10 dark:border-white/10 pb-1.5 shrink-0">

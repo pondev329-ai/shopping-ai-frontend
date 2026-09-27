@@ -1908,7 +1908,8 @@ export class RenderBackendChatAdapter implements ChatService {
     const stateToPersist: Record<string, unknown> = data.result.state
       ? { ...(data.result.state as Record<string, unknown>) }
       : {};
-    if (rawRoutes && !stateToPersist.routes) {
+    // Main Flowから最新のルート情報が得られた場合は、確実にstateToPersistに反映
+    if (rawRoutes && rawRoutes.length > 0) {
       stateToPersist.routes = rawRoutes;
     }
     if (Object.keys(stateToPersist).length > 0) {
@@ -1993,11 +1994,13 @@ export class RenderBackendChatAdapter implements ChatService {
    * レスポンス内の様々な階層からルートおよび候補 (routes[].candidates[]) を探索・正規化
    */
   private extractAllRoutes(data: JinbaBackendRunResponse): Array<unknown> | undefined {
-    const candidateSources = [
+    const candidateSources: unknown[] = [
       data.result?.routes,
       data.result?.state?.routes,
       (data.result as any)?.shopping_context?.routes,
+      (data.result as any)?.shopping?.routes,
       data.result?.state?.shopping_context?.routes,
+      (data.result?.state as any)?.shopping?.routes,
       (data.result as any)?.possibility_context?.routes,
       data.result?.state?.possibility_context?.routes,
       (data.result as any)?.session_context?.routes,
@@ -2006,25 +2009,58 @@ export class RenderBackendChatAdapter implements ChatService {
       data.state?.routes,
     ];
 
+    const collectedRoutes: any[] = [];
+    let hasRoutesWithCandidates = false;
+
     for (const src of candidateSources) {
       if (!src) continue;
+      let list: any[] = [];
       if (Array.isArray(src) && src.length > 0) {
-        return src;
-      }
-      if (typeof src === 'object' && Object.keys(src).length > 0) {
+        list = src;
+      } else if (typeof src === 'object' && Object.keys(src).length > 0) {
         const obj = src as Record<string, unknown>;
         if (Array.isArray(obj.routes) && obj.routes.length > 0) {
-          return obj.routes;
+          list = obj.routes;
+        } else if (obj.candidates || obj.candidate || obj.items || obj.products || obj.ingredients) {
+          list = [obj];
+        } else {
+          const vals = Object.values(src);
+          if (vals.length > 0 && typeof vals[0] === 'object') {
+            list = vals;
+          }
         }
-        if (obj.candidates || obj.candidate || obj.items || obj.products) {
-          return [obj];
-        }
-        const vals = Object.values(src);
-        if (vals.length > 0 && typeof vals[0] === 'object') {
-          return vals;
+      }
+
+      if (list.length > 0) {
+        // このソース内にcandidatesを持つルートがあるか確認
+        const containsCandidates = list.some((r: any) =>
+          (Array.isArray(r?.candidates) && r.candidates.length > 0) ||
+          (Array.isArray(r?.items) && r.items.length > 0) ||
+          Boolean(r?.candidate)
+        );
+        if (containsCandidates) {
+          hasRoutesWithCandidates = true;
+          collectedRoutes.push(...list);
+        } else if (!hasRoutesWithCandidates) {
+          collectedRoutes.push(...list);
         }
       }
     }
+
+    if (collectedRoutes.length > 0) {
+      // 重複ルートの正規化
+      const uniqueRoutes: any[] = [];
+      const seenKeys = new Set<string>();
+      for (const r of collectedRoutes) {
+        const key = String(r?.id || r?.name || r?.title || r?.section || JSON.stringify(r));
+        if (!seenKeys.has(key)) {
+          seenKeys.add(key);
+          uniqueRoutes.push(r);
+        }
+      }
+      return uniqueRoutes;
+    }
+
     return undefined;
   }
 
@@ -2066,18 +2102,32 @@ export class RenderBackendChatAdapter implements ChatService {
     }
 
     // routes[].candidates[] からの候補の追加（店頭で見つけた食材）
-    const candidateRoutes =
-      (Array.isArray(result.routes) ? result.routes : undefined) ||
-      (Array.isArray(state?.routes) ? state.routes : undefined) ||
-      (Array.isArray((result as any)?.shopping_context?.routes) ? (result as any).shopping_context.routes : undefined) ||
-      (Array.isArray(state?.shopping_context?.routes) ? state.shopping_context.routes : undefined) ||
-      (Array.isArray((result as any)?.possibility_context?.routes) ? (result as any).possibility_context.routes : undefined) ||
-      (Array.isArray(state?.possibility_context?.routes) ? state.possibility_context.routes : undefined) ||
-      (Array.isArray(state?.session_context?.routes) ? state.session_context.routes : undefined) ||
-      (result.routes && typeof result.routes === 'object' ? Object.values(result.routes) : undefined) ||
-      (state?.routes && typeof state.routes === 'object' ? Object.values(state.routes) : undefined);
+    // ※ 短絡評価（||）で空配列 [] が優先されてしまうのを防ぎ、すべてのルートソースから収集
+    const candidateRouteSources = [
+      result.routes,
+      state?.routes,
+      (result as any)?.shopping_context?.routes,
+      (result as any)?.shopping?.routes,
+      state?.shopping_context?.routes,
+      (state as any)?.shopping?.routes,
+      (result as any)?.possibility_context?.routes,
+      state?.possibility_context?.routes,
+      state?.session_context?.routes,
+    ];
 
-    if (Array.isArray(candidateRoutes)) {
+    const candidateRoutes: any[] = [];
+    candidateRouteSources.forEach((src) => {
+      if (Array.isArray(src) && src.length > 0) {
+        candidateRoutes.push(...src);
+      } else if (src && typeof src === 'object') {
+        const vals = Object.values(src);
+        if (vals.length > 0 && typeof vals[0] === 'object') {
+          candidateRoutes.push(...vals);
+        }
+      }
+    });
+
+    if (candidateRoutes.length > 0) {
       candidateRoutes.forEach((route: any, rIdx: number) => {
         let cands: any[] = [];
         if (Array.isArray(route?.candidates)) cands = route.candidates;
@@ -2108,9 +2158,18 @@ export class RenderBackendChatAdapter implements ChatService {
               c.item_name ||
               c.label ||
               c.display_name ||
+              c.display ||
               c.text ||
+              c.japanese ||
+              c.ja ||
               c.value;
-            title = typeof rawTitle === 'string' ? rawTitle.trim() : '';
+            if (typeof rawTitle === 'string') {
+              title = rawTitle.trim();
+            } else if (rawTitle && typeof rawTitle === 'object') {
+              title = (rawTitle.name || rawTitle.title || rawTitle.text || '').trim();
+            } else if (typeof c.id === 'string' && isNaN(Number(c.id))) {
+              title = c.id.trim();
+            }
           }
           if (!title) return;
           const exists = mappedOptions.some((o) => o.title.toLowerCase() === title.toLowerCase());
