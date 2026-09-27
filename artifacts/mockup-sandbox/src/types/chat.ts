@@ -63,4 +63,6 @@ export interface ChatResponse {
   expertMode?: string | null;
   /** Main Flowから渡されたルート・候補（routes[].candidates[]） */
   routes?: Array<unknown>;
+  /** 原因切り分け用の一時診断情報 (chatService.sendMessage直後の生データ解析) */
+  debugRoutesInfo?: string[];
 }
