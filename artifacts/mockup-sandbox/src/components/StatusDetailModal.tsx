@@ -12,7 +12,6 @@ interface StatusDetailModalProps {
   sessionTitle: string;
   onSelectCandidate?: (candidateTitle: string) => void;
   onOpenSessionImages?: () => void;
-  debugRoutesInfo?: string[] | null;
 }
 
 export const StatusDetailModal: React.FC<StatusDetailModalProps> = ({
@@ -23,7 +22,6 @@ export const StatusDetailModal: React.FC<StatusDetailModalProps> = ({
   sessionTitle,
   onSelectCandidate,
   onOpenSessionImages,
-  debugRoutesInfo,
 }) => {
   if (!isOpen) return null;
 
@@ -108,7 +106,6 @@ export const StatusDetailModal: React.FC<StatusDetailModalProps> = ({
           <StatusPossibilityBoard
             summary={summary}
             scene={scene}
-            debugRoutesInfo={debugRoutesInfo}
             onSelectCandidate={(title) => {
               if (onSelectCandidate) {
                 onSelectCandidate(title);

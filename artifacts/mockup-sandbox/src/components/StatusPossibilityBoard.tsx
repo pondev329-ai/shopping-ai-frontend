@@ -19,14 +19,12 @@ interface StatusPossibilityBoardProps {
   summary: SessionStatusSummary;
   scene: AppScene;
   onSelectCandidate?: (candidateTitle: string, actionType?: 'detail' | 'ingredients') => void;
-  debugRoutesInfo?: string[] | null;
 }
 
 export const StatusPossibilityBoard: React.FC<StatusPossibilityBoardProps> = ({
   summary,
   scene,
   onSelectCandidate,
-  debugRoutesInfo,
 }) => {
   const [activeTab, setActiveTab] = useState<'candidates' | 'decisions' | 'possibilities'>('candidates');
   const [isExpanded, setIsExpanded] = useState<boolean>(false);
@@ -109,28 +107,6 @@ export const StatusPossibilityBoard: React.FC<StatusPossibilityBoardProps> = ({
         {/* A. 現在の候補一覧 (Candidates) */}
         {activeTab === 'candidates' && (
           <div className="space-y-2">
-            {/* 原因切り分け用の一時診断表示 */}
-            {debugRoutesInfo && debugRoutesInfo.length > 0 && (
-              <div
-                id="debug-routes-status-board"
-                className="p-2.5 rounded-xl bg-amber-50/95 dark:bg-amber-950/60 border border-amber-300 dark:border-amber-700/80 text-xs font-mono text-amber-950 dark:text-amber-100 shadow-2xs"
-              >
-                <div className="flex items-center justify-between pb-1 mb-1 border-b border-amber-200 dark:border-amber-800/80 text-[10.5px] font-bold text-amber-800 dark:text-amber-300">
-                  <span>🛠️ 【一時診断】Backend routes 直近受信データ</span>
-                  <span className="text-[9.5px] bg-amber-200 dark:bg-amber-900/60 text-amber-900 dark:text-amber-200 px-1 py-0.2 rounded font-medium">
-                    一時診断
-                  </span>
-                </div>
-                <div className="space-y-0.5 text-[11px] leading-relaxed">
-                  {debugRoutesInfo.map((line, idx) => (
-                    <div key={idx} className="break-all font-mono">
-                      {line}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
             {summary.candidates && summary.candidates.length > 0 ? (
               summary.candidates.map((cand) => (
                 <div

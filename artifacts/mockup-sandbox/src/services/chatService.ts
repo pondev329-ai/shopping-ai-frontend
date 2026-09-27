@@ -50,8 +50,6 @@ export interface ChatService {
   deleteMemoryRomItem?(params: DeleteMemoryRomParams): Promise<DeleteMemoryRomResult>;
   onMemoryConnectionChange?(callback: (id: string | null) => void): () => void;
   getMemoryConnectUrl?(): string;
-  /** 原因切り分け用の一時診断: 直近のBackend routes受信ログを取得 */
-  getLatestDebugRoutesInfo?(): string[] | null;
 }
 
 /**
@@ -155,7 +153,6 @@ export class RenderBackendChatAdapter implements ChatService {
   private readonly MEMORY_STORAGE_KEY = 'shopping_ai_memory_connection_id';
   private memoryListeners: Set<(id: string | null) => void> = new Set();
   private sessionImageDataUrlCache = new Map<string, string>();
-  private latestDebugRoutesInfo: string[] | null = null;
 
   constructor(endpoint?: string) {
     // Vite開発環境のプロキシ (/api/render-backend) または環境変数/直接URL
@@ -1908,15 +1905,6 @@ export class RenderBackendChatAdapter implements ChatService {
       throw new Error(data.error || 'Render Backend execution did not return a valid result.');
     }
 
-    // 原因切り分け用の一時診断: chatService.sendMessage() がRenderから受け取った直後の raw data を解析
-    const debugRoutesInfo = this.extractRoutesDiagnostic(data);
-    this.latestDebugRoutesInfo = debugRoutesInfo;
-    try {
-      console.log('[DEBUG Backend routes diagnostic]', debugRoutesInfo);
-    } catch {
-      // ignore
-    }
-
     // Main Flowから渡された routes (買い回りルート・候補: routes[].candidates[])
     const rawRoutes = this.extractAllRoutes(data);
 
@@ -2003,116 +1991,7 @@ export class RenderBackendChatAdapter implements ChatService {
       currentScene,
       expertMode,
       routes: rawRoutes,
-      debugRoutesInfo,
     };
-  }
-
-  /**
-   * 原因切り分け用の一時診断:
-   * chatService.sendMessage() がRenderから受け取った直後の data.result.state.routes[].candidates[] の内容を抽出
-   * 
-   * 診断表示項目:
-   * 1. data.result.state.routes の存在
-   * 2. routesの件数
-   * 3. 各routeの ingredient
-   * 4. 各routeの candidates の件数
-   * 5. candidatesに入っている候補名（protein_or_theme、title、name等、実際に存在するフィールド）
-   */
-  private extractRoutesDiagnostic(data: JinbaBackendRunResponse): string[] {
-    const lines: string[] = [];
-    const stateObj = data.result?.state as Record<string, unknown> | undefined;
-
-    // 1. data.result.state.routes の存在
-    if (!stateObj) {
-      lines.push('DEBUG Backend routes: 存在しません (data.result.state が未定義)');
-      return lines;
-    }
-
-    const stateRoutes = stateObj.routes;
-
-    if (stateRoutes === undefined) {
-      lines.push('DEBUG Backend routes: 存在しません (data.result.state.routes が undefined)');
-      const stateKeys = Object.keys(stateObj);
-      lines.push(`DEBUG data.result.state keys: [${stateKeys.join(', ')}]`);
-    } else if (stateRoutes === null) {
-      lines.push('DEBUG Backend routes: null');
-    } else if (!Array.isArray(stateRoutes)) {
-      lines.push(`DEBUG Backend routes: 非配列 (${typeof stateRoutes})`);
-    } else {
-      // 2. routesの件数
-      lines.push(`DEBUG Backend routes: ${stateRoutes.length}`);
-      if (stateRoutes.length === 0) {
-        lines.push('DEBUG routes: 0件 (空配列)');
-      } else {
-        stateRoutes.forEach((route: any, rIdx: number) => {
-          // 3. 各routeの ingredient
-          const ingredient =
-            route?.ingredient !== undefined && route?.ingredient !== null
-              ? String(route.ingredient)
-              : (route?.name ?? route?.title ?? route?.id ?? '(ingredient未設定)');
-
-          // 4. 各routeの candidates の件数
-          const cands = route?.candidates;
-          const candCount = Array.isArray(cands)
-            ? cands.length
-            : cands !== undefined
-            ? `非配列(${typeof cands})`
-            : 0;
-
-          lines.push(`DEBUG route: ${ingredient} / candidates: ${candCount}`);
-
-          // 5. candidatesに入っている候補名（protein_or_theme、title、name等、実際に存在するフィールド）
-          if (Array.isArray(cands)) {
-            if (cands.length === 0) {
-              lines.push(`DEBUG candidate: (candidatesは空配列です)`);
-            } else {
-              cands.forEach((cand: any) => {
-                if (typeof cand === 'string') {
-                  lines.push(`DEBUG candidate: ${cand}`);
-                } else if (cand && typeof cand === 'object') {
-                  const candObj = cand as Record<string, unknown>;
-                  const primaryName =
-                    candObj.protein_or_theme ||
-                    candObj.title ||
-                    candObj.name ||
-                    candObj.product_name ||
-                    candObj.ingredient ||
-                    candObj.item ||
-                    `(候補名フィールドなし)`;
-
-                  // 実際に存在するフィールドを詳細表示
-                  const fieldParts: string[] = [];
-                  for (const key of ['protein_or_theme', 'title', 'name', 'product_name', 'ingredient', 'item', 'id', 'summary']) {
-                    if (candObj[key] !== undefined && candObj[key] !== null) {
-                      fieldParts.push(`${key}="${candObj[key]}"`);
-                    }
-                  }
-                  const fieldInfo =
-                    fieldParts.length > 0
-                      ? ` (${fieldParts.join(', ')})`
-                      : ` (keys: [${Object.keys(candObj).join(', ')}])`;
-                  lines.push(`DEBUG candidate: ${primaryName}${fieldInfo}`);
-                } else {
-                  lines.push(`DEBUG candidate: ${JSON.stringify(cand)}`);
-                }
-              });
-            }
-          }
-        });
-      }
-    }
-
-    // 参考: data.result.routes（stateの外側）ももし存在すれば付記
-    if (data.result?.routes !== undefined && data.result?.routes !== stateRoutes) {
-      const outerRoutes = data.result.routes;
-      lines.push(
-        `DEBUG (参考) data.result.routes: ${
-          Array.isArray(outerRoutes) ? `${outerRoutes.length}件` : typeof outerRoutes
-        }`
-      );
-    }
-
-    return lines;
   }
 
   /**
@@ -2261,7 +2140,12 @@ export class RenderBackendChatAdapter implements ChatService {
         else if (Array.isArray(route?.items)) cands = route.items;
         else if (Array.isArray(route?.products)) cands = route.products;
         else if (Array.isArray(route?.ingredients)) cands = route.ingredients;
-        const routeName = route?.name || route?.title || route?.section;
+        const routeIngredient = route?.ingredient ? String(route.ingredient).trim() : '';
+        const routeName = routeIngredient || route?.name || route?.title || route?.section;
+
+        if (cands.length === 0 && routeIngredient) {
+          cands = [routeIngredient];
+        }
 
         cands.forEach((c: any, cIdx: number) => {
           let title = '';
@@ -2269,6 +2153,15 @@ export class RenderBackendChatAdapter implements ChatService {
             title = c.trim();
           } else if (c && typeof c === 'object') {
             const rawTitle =
+              c.protein_or_theme ||
+              c.theme ||
+              c.protein ||
+              c.dish ||
+              c.dish_name ||
+              c.menu ||
+              c.menu_name ||
+              c.recipe ||
+              c.recipe_name ||
               c.title ||
               c.name ||
               c.item ||
@@ -2295,6 +2188,9 @@ export class RenderBackendChatAdapter implements ChatService {
             } else if (typeof c.id === 'string' && isNaN(Number(c.id))) {
               title = c.id.trim();
             }
+          }
+          if (!title && routeIngredient) {
+            title = routeIngredient;
           }
           if (!title) return;
           const exists = mappedOptions.some((o) => o.title.toLowerCase() === title.toLowerCase());

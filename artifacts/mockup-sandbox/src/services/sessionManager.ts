@@ -171,6 +171,8 @@ export function extractStatusSummary(
         obj.items ||
         obj.products ||
         obj.ingredients ||
+        obj.ingredient ||
+        obj.protein_or_theme ||
         obj.candidate_list ||
         obj.options
       ) {
@@ -184,11 +186,22 @@ export function extractStatusSummary(
     return [];
   }
 
-  function extractCandidateTitle(cand: unknown): string {
+  function extractCandidateTitle(cand: unknown, parentIngredient?: string): string {
     if (typeof cand === 'string') return cand.trim();
-    if (!cand || typeof cand !== 'object') return '';
+    if (!cand || typeof cand !== 'object') {
+      return (parentIngredient || '').trim();
+    }
     const c = cand as Record<string, unknown>;
     const directFields = [
+      c.protein_or_theme,
+      c.theme,
+      c.protein,
+      c.dish,
+      c.dish_name,
+      c.menu,
+      c.menu_name,
+      c.recipe,
+      c.recipe_name,
       c.title,
       c.name,
       c.item,
@@ -216,12 +229,20 @@ export function extractStatusSummary(
         if (nested) return nested;
       }
     }
+    for (const [key, val] of Object.entries(c)) {
+      if (
+        typeof val === 'string' &&
+        val.trim() &&
+        !['id', 'type', 'status', 'url', 'image', 'icon', 'color', 'source'].includes(key.toLowerCase())
+      ) {
+        return val.trim();
+      }
+    }
     if (typeof c.id === 'string' && c.id.trim() && isNaN(Number(c.id))) {
       return c.id.trim();
     }
-    const keys = Object.keys(c);
-    if (keys.length === 1 && typeof keys[0] === 'string' && keys[0].trim() && isNaN(Number(keys[0]))) {
-      return keys[0].trim();
+    if (parentIngredient && parentIngredient.trim()) {
+      return parentIngredient.trim();
     }
     return '';
   }
@@ -251,8 +272,9 @@ export function extractStatusSummary(
     const routesList = collectRouteObjects(source);
 
     routesList.forEach((r, rIdx) => {
+      const routeIngredient = r.ingredient ? String(r.ingredient).trim() : '';
       const routeTitle = String(
-        r.name || r.title || r.section || r.label || r.route || r.category || r.aisle || ''
+        r.name || r.title || r.ingredient || r.section || r.label || r.route || r.category || r.aisle || ''
       ).trim();
       const rawCands: unknown[] = [];
       if (Array.isArray(r.candidates) && r.candidates.length > 0) rawCands.push(...r.candidates);
@@ -265,9 +287,20 @@ export function extractStatusSummary(
       if (Array.isArray(r.ingredients) && r.ingredients.length > 0) rawCands.push(...r.ingredients);
       if (Array.isArray(r.candidate_list) && r.candidate_list.length > 0) rawCands.push(...r.candidate_list);
 
+      // r.ingredient が設定されていて候補配列が空の場合は、ルート食材自身を候補として扱う
+      if (rawCands.length === 0 && routeIngredient) {
+        rawCands.push(routeIngredient);
+      }
+
       rawCands.forEach((cand, cIdx) => {
         if (!cand) return;
-        const title = extractCandidateTitle(cand);
+        let title = extractCandidateTitle(cand, routeIngredient);
+        if (!title && routeIngredient) {
+          title = routeIngredient;
+        }
+        if (!title && routeTitle) {
+          title = routeTitle;
+        }
         if (!title) return;
 
         let id = `route-cand-${rIdx}-${cIdx}-${title}`;

@@ -148,19 +148,6 @@ export const ShoppingAIChat: React.FC<ShoppingAIChatProps> = ({
   const [photoError, setPhotoError] = useState<string | null>(null);
   const [showPlusMenu, setShowPlusMenu] = useState(false);
 
-  // 6. 原因切り分け用の一時診断ステート（chatService.sendMessage()直後のroutes[].candidates[]内容）
-  const [debugRoutesInfo, setDebugRoutesInfo] = useState<string[] | null>(() => {
-    if (chatService.getLatestDebugRoutesInfo) {
-      const current = chatService.getLatestDebugRoutesInfo();
-      if (current && current.length > 0) return current;
-    }
-    try {
-      const saved = localStorage.getItem('shopping_ai_debug_routes_info');
-      return saved ? JSON.parse(saved) : null;
-    } catch {
-      return null;
-    }
-  });
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -488,15 +475,6 @@ export const ShoppingAIChat: React.FC<ShoppingAIChatProps> = ({
         activeSession.id
       );
 
-      // 一時診断情報の更新 (chatService.sendMessage直後の生データ解析結果)
-      if (response.debugRoutesInfo) {
-        setDebugRoutesInfo(response.debugRoutesInfo);
-        try {
-          localStorage.setItem('shopping_ai_debug_routes_info', JSON.stringify(response.debugRoutesInfo));
-        } catch {
-          // ignore
-        }
-      }
 
       // Main Flowから渡された current_scene と expert_mode の更新
       const updatedScene = response.currentScene ?? activeSession.currentScene ?? 'planning';
@@ -892,31 +870,6 @@ export const ShoppingAIChat: React.FC<ShoppingAIChatProps> = ({
                 {getDisplayMessageContent(latestAssistantMsg.content, latestAssistantMsg.imageUrl)}
               </div>
 
-              {/* 一時診断表示: Main Flow → Render → Frontend 直後データ */}
-              {debugRoutesInfo && debugRoutesInfo.length > 0 && (
-                <div
-                  id="debug-routes-diagnostic-card"
-                  className="w-full sm:max-w-[92%] mt-2 p-2.5 rounded-xl bg-amber-50/95 dark:bg-amber-950/60 border border-amber-300 dark:border-amber-700/80 text-xs font-mono text-amber-950 dark:text-amber-100 shadow-2xs"
-                >
-                  <div className="flex items-center justify-between pb-1.5 mb-1.5 border-b border-amber-200 dark:border-amber-800/80 text-[11px] font-bold text-amber-800 dark:text-amber-300">
-                    <span className="flex items-center gap-1.5">
-                      <span>🛠️</span>
-                      <span>【一時診断】Backend routes 直近受信データ</span>
-                    </span>
-                    <span className="text-[10px] bg-amber-200 dark:bg-amber-900/60 text-amber-900 dark:text-amber-200 px-1.5 py-0.2 rounded font-medium">
-                      一時診断
-                    </span>
-                  </div>
-                  <div className="space-y-0.5 text-[11.5px] leading-relaxed">
-                    {debugRoutesInfo.map((line, idx) => (
-                      <div key={idx} className="break-all font-mono">
-                        {line}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
               {/* Inline Decision Support (AI側のみ) */}
               {latestAssistantMsg.decisionData && (
                 <div className="w-full sm:max-w-[92%] mt-2.5 space-y-2.5">
@@ -1306,7 +1259,6 @@ export const ShoppingAIChat: React.FC<ShoppingAIChatProps> = ({
         summary={activeSession.statusSummary}
         scene={activeSession.currentScene || 'planning'}
         sessionTitle={activeSession.title}
-        debugRoutesInfo={debugRoutesInfo}
         onSelectCandidate={(candidateTitle) =>
           handleSend(`「${candidateTitle}」について詳しく教えてください。`)
         }
